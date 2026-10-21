@@ -1,0 +1,10 @@
+{
+  "name": "spielesammlung",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backgammon, Schach, Kanaster, Doppelkopf und Skat als Web-App fürs iPhone",
+  "scripts": {
+    "test": "node tests/run.js"
+  }
+}
