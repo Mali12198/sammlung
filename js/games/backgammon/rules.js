@@ -85,7 +85,8 @@ export default {
 <h3>Tipp und Trainer</h3>
 <p>Die Glühbirne zeigt dir den besten Zug (grün umrandet) mit Begründung. Der Trainer prüft deinen Zug beim Bestätigen und bietet an, nochmal zu ziehen, wenn es klar Besseres gibt.</p>
 <h3>Spielstärke</h3>
-<p><b>Leicht</b> zieht oft nur ordentlich. <b>Mittel</b> wählt den besten Zug nach Stellungsbewertung. <b>Schwer</b> rechnet zusätzlich alle 21 möglichen Antwortwürfe durch.</p>`,
+<p><b>Leicht</b> zieht oft nur ordentlich. <b>Mittel</b> wählt den besten Zug nach Stellungsbewertung. <b>Schwer</b> rechnet zusätzlich alle 21 möglichen Antwortwürfe durch.</p>
+<h3>Zu zweit</h3><p>Menü → „Neues Spiel“ → „Zu zweit“: Hell zieht nach unten rechts, Dunkel nach oben rechts. Wer dran ist, würfelt und zieht wie gewohnt. Verdoppelt einer, entscheidet der andere am selben iPhone, ob er annimmt.</p>`,
     },
   ],
 };

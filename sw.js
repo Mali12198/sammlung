@@ -1,7 +1,7 @@
 // Service Worker: macht die Spielesammlung offline spielbar.
 // Seiten kommen bevorzugt aus dem Netz (damit Updates ankommen), alles andere aus dem Cache
 // und wird im Hintergrund aufgefrischt.
-const CACHE = 'spiele-v1';
+const CACHE = 'spiele-v2';
 const CORE = [
   './',
   "assets/fonts/jost-400.woff2",
@@ -27,10 +27,17 @@ const CORE = [
   "js/games/doppelkopf/engine.js",
   "js/games/doppelkopf/rules.js",
   "js/games/doppelkopf/view.js",
+  "js/games/kniffel/engine.js",
+  "js/games/kniffel/rules.js",
+  "js/games/kniffel/view.js",
+  "js/games/qwixx/engine.js",
+  "js/games/qwixx/rules.js",
+  "js/games/qwixx/view.js",
   "js/games/skat/engine.js",
   "js/games/skat/rules.js",
   "js/games/skat/view.js",
   "js/main.js",
+  "js/players.js",
   "js/shell.js",
   "js/store.js",
   "js/ui.js",

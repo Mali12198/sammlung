@@ -1,7 +1,7 @@
 {
   "name": "Spielesammlung",
   "short_name": "Spiele",
-  "description": "Backgammon, Schach, Kanaster, Doppelkopf und Skat gegen den Computer – mit Regelheft und Trainer.",
+  "description": "Backgammon, Schach, Kanaster, Doppelkopf, Skat, Kniffel und Qwixx gegen den Computer oder mit Freunden – mit Regelheft und Trainer.",
   "lang": "de",
   "start_url": "./",
   "scope": "./",

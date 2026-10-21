@@ -1,7 +1,8 @@
-// Kanaster – Oberfläche
+// Kanaster – Oberfläche (zu viert mit Partnern oder zu zweit; Menschen und Computer gemischt)
 import { h, dialog, toast, sleep } from '../../ui.js';
 import { load, save, addResult, delay } from '../../store.js';
 import { cardEl, fitHand } from '../../cards/render.js';
+import { choosePlayers, handover } from '../../players.js';
 import {
   newRound, sortHand, teamOf, pileTop, pileFrozen, frozenFor, minimum, canastas, isNaturalMeld, canGoOut,
   drawStock, pilePlans, takePile, meld, checkMelds, discard, canDiscard, isWild, isNatural, isBlack3, sumValue, value,
@@ -12,6 +13,10 @@ const TARGET = 5000;
 const ART = { A: 'das', K: 'den', Q: 'die', J: 'den', X: 'den' };
 const ART1 = { A: 'Das', K: 'Der', Q: 'Die', J: 'Der', X: 'Der' };
 const art = (c, nom) => (nom ? ART1 : ART)[c[0] === 'X' ? 'X' : c[1]] || (nom ? 'Die' : 'die');
+const DEFAULTS = {
+  4: [{ name: 'Du', human: true }, { name: 'Lotte', human: false }, { name: 'Karl', human: false }, { name: 'Hanne', human: false }],
+  2: [{ name: 'Du', human: true }, { name: 'Lotte', human: false }],
+};
 
 export function mount(ui) {
   let g = load('save:kanaster');
@@ -19,18 +24,37 @@ export function mount(ui) {
   let staged = [];          // Erstmeldung im Aufbau: [{cards}]
   let token = 0, busy = false;
   let hint = null;          // { stock?, pile?, cards?:[], meld?: rank }
+  let viewer = 0;
 
   const N = () => g.s.n;
-  const NAMES4 = ['Du', 'Lotte', 'Karl', 'Hanne'];
-  const NAMES2 = ['Du', 'Lotte'];
-  const nameOf = p => (N() === 4 ? NAMES4 : NAMES2)[p];
+  const players = () => (g && g.players && g.players.length === N() ? g.players : DEFAULTS[N()]);
+  const isHuman = p => !!players()[p].human;
+  const humans = () => [...Array(N()).keys()].filter(isHuman);
+  const multi = () => humans().length > 1;
+  const isYou = p => !multi() && isHuman(p);
+  const nameOf = p => (isYou(p) ? 'Du' : players()[p].name);
+  const V = () => viewer;
+  const myTeam = () => teamOf(viewer);
+  const theirTeam = () => 1 - myTeam();
+  const teamLabel = (t, long) => {
+    const mem = [...Array(N()).keys()].filter(p => teamOf(p) === t);
+    if (N() === 2) return nameOf(mem[0]);
+    const names = mem.map(p => (p === viewer ? 'du' : nameOf(p)));
+    if (t === myTeam()) return long ? `Wir (${names.sort((a, b) => (a === 'du' ? -1 : b === 'du' ? 1 : 0)).join(' & ')})` : 'Wir';
+    return long ? `Sie (${names.join(' & ')})` : 'Sie';
+  };
 
-  function fresh(keepTotals) {
+  function fresh(keepTotals, newPlayers) {
     const old = g;
-    const n = ui.option('players', 4);
+    const n = newPlayers ? newPlayers.length : (old ? old.s.n : ui.option('players', 4));
     const totals = keepTotals && old && old.s.n === n ? old.s.totals : [0, 0];
-    const dealer = old ? (old.s.dealer + 1) % n : n - 1;
-    g = { s: newRound({ n, dealer, totals }), round: keepTotals && old ? (old.round || 1) + 1 : 1, tipsShown: old ? old.tipsShown || {} : {}, over: null };
+    const dealer = old && keepTotals ? (old.s.dealer + 1) % n : n - 1;
+    g = {
+      s: newRound({ n, dealer, totals }),
+      players: newPlayers || (old && old.players && old.players.length === n ? old.players : DEFAULTS[n]),
+      round: keepTotals && old ? (old.round || 1) + 1 : 1, tipsShown: old ? old.tipsShown || {} : {}, over: null,
+    };
+    viewer = humans()[0] ?? 0;
     sel = new Set(); staged = []; hint = null;
     persist();
   }
@@ -52,10 +76,10 @@ export function mount(ui) {
   ui.root.style.setProperty('--coach-bottom', '230px');
 
   // ---------- Hilfen ----------
-  const hand = () => sortHand(g.s.hands[0]);
+  const myTurn = () => g.s.turn === viewer && isHuman(viewer) && !busy;
+  const hand = () => sortHand(g.s.hands[viewer]);
   const selCards = () => { const hd = hand(); return [...sel].sort((a, b) => a - b).map(i => hd[i]); };
   const stagedCards = () => staged.flatMap(x => x.cards);
-  // Hand ohne vorgemerkte Erstmeldung
   function visibleHand() {
     const hd = hand();
     const rest = stagedCards().slice();
@@ -67,61 +91,56 @@ export function mount(ui) {
     const isCan = n >= 7;
     const nat = isNaturalMeld(m);
     const show = isCan ? [m.cards.find(isNatural) || m.cards[0]] : m.cards;
-    const el = h('div', { class: 'meld' + (isCan ? ' canasta' + (nat ? ' natural' : '') : '') + (pending ? ' pending' : '') + (hint && hint.meld === m.rank && team === 0 ? ' is-hint' : ''), role: 'button', 'aria-label': `${n} ${RANK_NAME[m.rank]}${isCan ? (nat ? ', reine Canasta' : ', gemischte Canasta') : ''}` },
+    const el = h('div', { class: 'meld' + (isCan ? ' canasta' + (nat ? ' natural' : '') : '') + (pending ? ' pending' : '') + (hint && hint.meld === m.rank && team === myTeam() ? ' is-hint' : ''), role: 'button', 'aria-label': `${n} ${RANK_NAME[m.rank]}${isCan ? (nat ? ', reine Canasta' : ', gemischte Canasta') : ''}` },
       show.map(c => cardEl(c, { w: 30 })),
       h('span', { class: 'cnt' }, isCan ? (nat ? 'Rein' : 'Gem.') + ' ' + n : String(n)));
     if (team === myTeam() && !pending) el.addEventListener('click', () => onMeldTap(m));
     return el;
   }
 
-  const myTeam = () => 0;
-
   function teamZone(team) {
     const s = g.s;
     const melds = s.melds[team];
     const r3 = s.red3[team];
-    const label = team === 0 ? (N() === 4 ? 'Wir (du & Karl)' : 'Du') : (N() === 4 ? 'Sie (Lotte & Hanne)' : 'Lotte');
     const pts = melds.reduce((a, m) => a + sumValue(m.cards), 0);
     const can = canastas(s, team).length;
     const head = h('div', { class: 'can-team-head' },
-      h('span', {}, h('b', {}, label), ` · ${can} Canasta${can === 1 ? '' : 's'} · ${pts} P.`),
+      h('span', {}, h('b', {}, teamLabel(team, true)), ` · ${can} Canasta${can === 1 ? '' : 's'} · ${pts} P.`),
       r3.length ? h('span', { class: 'red3-chip', title: 'Rote Dreien' }, `${r3.length} × rote 3`) : null);
     const list = h('div', { class: 'melds' });
     for (const m of melds) list.append(meldEl(m, team));
-    if (team === 0) for (const st of staged) list.append(meldEl({ rank: st.cards.find(isNatural)[1], cards: st.cards }, 0, { pending: true }));
+    if (team === myTeam()) for (const st of staged) list.append(meldEl({ rank: st.cards.find(isNatural)[1], cards: st.cards }, team, { pending: true }));
     if (!list.children.length) {
       const min = minimum(s, team);
-      list.append(h('div', { class: 'meld empty-hint' }, team === 0 ? `Noch keine Meldung · Erstmeldung: ${min} Punkte` : `Noch keine Meldung (braucht ${min})`));
+      list.append(h('div', { class: 'meld empty-hint' }, team === myTeam() ? `Noch keine Meldung · Erstmeldung: ${min} Punkte` : `Noch keine Meldung (braucht ${min})`));
     }
     return [head, list];
   }
 
   function render() {
     const s = g.s;
-    // Kopf
+    const mt = myTeam(), ot = theirTeam();
     pills.replaceChildren(
       h('span', { class: 'trump-pill static' }, `Runde ${g.round || 1}`),
-      h('button', { class: 'trump-pill static score', onclick: showScores }, h('b', {}, N() === 4 ? 'Wir ' : 'Du '), String(s.totals[0]), ' : ', String(s.totals[1]), h('b', {}, N() === 4 ? ' Sie' : ' Lotte')));
-    // Mitspieler
-    const others = N() === 4 ? [1, 2, 3] : [1];
-    oppRow.replaceChildren(...others.map(p => h('div', { class: 'can-player' + (s.turn === p && s.phase !== 'done' ? ' on' : '') + (teamOf(p) === 0 ? ' partner' : '') },
+      h('button', { class: 'trump-pill static score', onclick: showScores }, h('b', {}, teamLabel(mt) + ' '), String(s.totals[mt]), ' : ', String(s.totals[ot]), h('b', {}, ' ' + teamLabel(ot))));
+    const others = [...Array(N() - 1).keys()].map(k => (viewer + 1 + k) % N());
+    oppRow.replaceChildren(...others.map(p => h('div', { class: 'can-player' + (s.turn === p && s.phase !== 'done' ? ' on' : '') + (teamOf(p) === mt ? ' partner' : '') },
       h('span', { class: 'turn-dot' }), h('b', {}, nameOf(p)), h('span', { class: 'cc', 'aria-label': `${s.hands[p].length} Karten` }, h('i', { class: 'mini-back' }), String(s.hands[p].length)), h('span', { class: 'bubble-slot', 'data-p': p }))));
-    theirZone.replaceChildren(...teamZone(1));
-    ourZone.replaceChildren(...teamZone(0));
-    // Mitte: Talon und Ablage
-    const myDraw = s.turn === 0 && s.phase === 'draw' && !busy;
+    theirZone.replaceChildren(...teamZone(ot));
+    ourZone.replaceChildren(...teamZone(mt));
+    const myDraw = myTurn() && s.phase === 'draw';
     const top = pileTop(s);
     const frozen = pileFrozen(s);
     const stockEl = h('div', { class: 'pile-slot' + (myDraw && s.stock.length ? ' can-act' : '') + (hint && hint.stock ? ' is-hint' : ''), role: 'button', 'aria-label': 'Talon: Karte ziehen', onclick: onStock },
       h('div', { class: 'stack' }, s.stock.length ? cardEl(null, { faceDown: true }) : h('div', { class: 'card empty' })), h('span', {}, `Talon · ${s.stock.length}`));
     const under = s.pile.length > 1 ? s.pile.slice(0, -1).filter(isWild).slice(-1)[0] : null;
-    const pileEl = h('div', { class: 'pile-slot' + (myDraw && pilePlans(s, 0).length ? ' can-act' : '') + (hint && hint.pile ? ' is-hint' : ''), role: 'button', 'aria-label': 'Ablagestapel nehmen', onclick: () => onPile() },
+    const pileEl = h('div', { class: 'pile-slot' + (myDraw && pilePlans(s, viewer).length ? ' can-act' : '') + (hint && hint.pile ? ' is-hint' : ''), role: 'button', 'aria-label': 'Ablagestapel nehmen', onclick: () => onPile() },
       h('div', { class: 'stack' + (frozen ? ' frozen' : '') }, under ? cardEl(under, { cls: 'frozen-card' }) : null, top ? cardEl(top) : h('div', { class: 'card empty' })),
       h('span', {}, `Ablage · ${s.pile.length}${frozen ? ' · eingefroren' : ''}`));
     mid.replaceChildren(stockEl, pileEl);
     renderHand();
     renderActions();
-    ui.setSubtitle(`Computer ${ui.level()}`);
+    ui.setSubtitle(humans().length === N() ? `${N()} Spieler` : `Computer ${ui.level()}`);
   }
 
   function renderHand() {
@@ -132,7 +151,6 @@ export function mount(ui) {
     const { w, ov } = fitHand(per, avail, 62, 24);
     handEl.style.setProperty('--hcw', w + 'px');
     handEl.style.setProperty('--ov', ov + 'px');
-    const myMeld = g.s.turn === 0 && g.s.phase === 'meld';
     const hintSet = new Set(hint && hint.cards ? hint.cards : []);
     const hintUsed = [];
     const rowEls = [];
@@ -142,7 +160,7 @@ export function mount(ui) {
         const el = cardEl(c, { w });
         if (sel.has(i)) el.classList.add('is-sel');
         if (hintSet.has(c) && hintUsed.filter(x => x === c).length < (hint.cards || []).filter(x => x === c).length) { el.classList.add('is-hint'); hintUsed.push(c); }
-        if (!myMeld && g.s.turn === 0 && g.s.phase === 'draw') el.classList.add('is-soft');
+        if (myTurn() && g.s.phase === 'draw') el.classList.add('is-soft');
         el.addEventListener('click', () => onCard(i));
         return el;
       })));
@@ -159,15 +177,15 @@ export function mount(ui) {
     if (s.phase === 'done') {
       txt = 'Runde vorbei.';
       acts.push(btn('Ergebnis', showResult), btn(g.over ? 'Neues Spiel' : 'Nächste Runde', nextRound, true));
-    } else if (s.turn !== 0) {
+    } else if (!myTurn()) {
       txt = `${nameOf(s.turn)} ist dran …`;
     } else if (s.phase === 'draw') {
       txt = s.stock.length ? 'Zieh vom Talon oder nimm die Ablage.' : 'Der Talon ist leer – nimm die Ablage.';
       if (s.stock.length) acts.push(btn(s.drawN === 2 ? 'Zwei Karten ziehen' : 'Karte ziehen', onStock, true));
-      acts.push(btn('Ablage nehmen', () => onPile(), !s.stock.length, !pilePlans(s, 0).length));
+      acts.push(btn('Ablage nehmen', () => onPile(), !s.stock.length, !pilePlans(s, viewer).length));
     } else {
       const n = sel.size;
-      const team = 0;
+      const team = myTeam();
       if (!s.initial[team]) {
         const tot = sumValue(stagedCards());
         txt = staged.length ? `Erstmeldung: <b>${tot}</b> von ${minimum(s, team)} Punkten` : `Melde Karten (Erstmeldung ${minimum(s, team)}) oder wirf eine ab.`;
@@ -181,17 +199,17 @@ export function mount(ui) {
   }
 
   function bubble(p, text, ms = 1800) {
-    const slot = oppRow.querySelector(`.bubble-slot[data-p="${p}"]`);
-    if (!slot) return;
-    slot.replaceChildren(h('span', { class: 'bubble' }, text));
-    setTimeout(() => { if (slot.isConnected) slot.replaceChildren(); }, ms);
+    const el = oppRow.querySelector(`.bubble-slot[data-p="${p}"]`);
+    if (!el) return;
+    el.replaceChildren(h('span', { class: 'bubble' }, text));
+    setTimeout(() => { if (el.isConnected) el.replaceChildren(); }, ms);
   }
 
   // ---------- Eingaben ----------
   function onCard(i) {
     const s = g.s;
-    if (busy || s.turn !== 0 || s.phase !== 'meld') {
-      if (s.turn === 0 && s.phase === 'draw') toast('Zuerst ziehen: Talon oder Ablage.');
+    if (!myTurn() || s.phase !== 'meld') {
+      if (myTurn() && s.phase === 'draw') toast('Zuerst ziehen: Talon oder Ablage.');
       return;
     }
     hint = null;
@@ -201,13 +219,14 @@ export function mount(ui) {
 
   function onStock() {
     const s = g.s;
-    if (busy || s.turn !== 0 || s.phase !== 'draw') return;
+    if (!myTurn() || s.phase !== 'draw') return;
     if (!s.stock.length) { toast('Der Talon ist leer.'); return; }
     hint = null;
-    const r3 = s.red3[0].length;
-    const got = drawStock(s, 0);
+    const t = myTeam();
+    const r3 = s.red3[t].length;
+    const got = drawStock(s, viewer);
     persist();
-    if (s.red3[0].length > r3) {
+    if (s.red3[t].length > r3) {
       toast(`Rote Drei! Sie kommt als Bonus (+100) auf den Tisch, du ziehst eine Ersatzkarte.`, 3200);
       coachOnce('red3', { title: 'Rote Drei', text: 'Rote Dreien zählen 100 Punkte (alle vier: 800). Aber Achtung: Hat euer Team am Ende nichts gemeldet, zählen sie minus.', ms: 8000 });
     }
@@ -219,16 +238,18 @@ export function mount(ui) {
   function flashNew(cards) {
     const hd = hand();
     const want = cards.slice();
-    hd.forEach((c, i) => { const k = want.indexOf(c); if (k >= 0) { want.splice(k, 1); const el = handEl.querySelectorAll('.card')[visibleHand().findIndex(x => x.i === i)]; if (el) el.classList.add('is-new'); } });
+    const vis = visibleHand();
+    const els = handEl.querySelectorAll('.card');
+    hd.forEach((c, i) => { const k = want.indexOf(c); if (k >= 0) { want.splice(k, 1); const el = els[vis.findIndex(x => x.i === i)]; if (el) el.classList.add('is-new'); } });
   }
 
   async function onPile(confirm = true) {
     const s = g.s;
-    if (busy || s.turn !== 0 || s.phase !== 'draw') return;
-    const plans = pilePlans(s, 0);
+    if (!myTurn() || s.phase !== 'draw') return;
+    const plans = pilePlans(s, viewer);
     if (!plans.length) { toast(whyNoPile(), 4200); return; }
     plans.sort((a, b) => (a.kind === 'wild') - (b.kind === 'wild'));
-    let plan = plans[0];
+    const plan = plans[0];
     const top = pileTop(s);
     const desc = plan.kind === 'add' ? `${art(top, true)} ${cardName(top)} kommt an eure ${RANK_NAME[top[1]]}.`
       : `Du meldest ${art(top)} ${cardName(top)} mit ${plan.use.map(cardName).join(', ')}.`;
@@ -240,7 +261,7 @@ export function mount(ui) {
     });
     if (!ok) return;
     hint = null; staged = []; sel = new Set();
-    takePile(s, 0, plan);
+    takePile(s, viewer, plan);
     persist();
     if (s.phase === 'done') return roundOver();
     render();
@@ -252,75 +273,73 @@ export function mount(ui) {
     if (!top) return 'Die Ablage ist leer.';
     if (isWild(top)) return 'Oben liegt ein Joker oder eine Zwei – so kann niemand die Ablage nehmen.';
     if (isBlack3(top)) return 'Oben liegt eine schwarze Drei: Sie blockiert die Ablage für diesen Zug.';
-    const team = 0;
+    const team = myTeam();
     const r = RANK_NAME[top[1]];
     if (!s.initial[team]) return `Ihr habt noch keine Erstmeldung. Du brauchst zwei echte ${r} zur oberen Karte und zusammen mindestens ${minimum(s, team)} Punkte.`;
     if (pileFrozen(s)) return `Die Ablage ist eingefroren (ein Joker oder eine Zwei liegt darin). Du brauchst ein echtes Paar ${r}.`;
     return `Du brauchst zwei ${r} (oder eine ${RANK_ONE[top[1]]} und einen Joker bzw. eine Zwei) – oder eine eigene ${r}-Meldung.`;
   }
 
-  function groupSelection(cards, targetRank) {
+  function groupSelection(cards) {
     const nat = cards.filter(isNatural);
     const wild = cards.filter(isWild);
-    if (targetRank) return { groups: [{ cards, rank: targetRank }] };
     const byRank = {};
     for (const c of nat) (byRank[c[1]] = byRank[c[1]] || []).push(c);
     const ranks = Object.keys(byRank);
     if (!ranks.length) return { err: 'Joker und Zweien allein sind keine Meldung. Tippe danach auf eine eurer Meldungen, um sie anzulegen.' };
     if (wild.length && ranks.length > 1) return { err: 'Bei mehreren Rängen weiß ich nicht, wohin die Joker sollen. Melde die Ränge einzeln.' };
-    const groups = ranks.map(r => ({ cards: byRank[r].concat(ranks.length === 1 ? wild : []) }));
-    return { groups };
+    return { groups: ranks.map(r => ({ cards: byRank[r].concat(ranks.length === 1 ? wild : []) })) };
   }
+
+  const plain = err => err.replace(/<[^>]+>/g, '');
 
   function onMeld() {
     const s = g.s;
-    if (busy || s.turn !== 0 || s.phase !== 'meld' || !sel.size) return;
-    const cards = selCards();
-    const gs = groupSelection(cards);
+    if (!myTurn() || s.phase !== 'meld' || !sel.size) return;
+    const gs = groupSelection(selCards());
     if (gs.err) { toast(gs.err, 3600); return; }
-    if (!s.initial[0]) {
-      // Erstmeldung schrittweise aufbauen
+    if (!s.initial[myTeam()]) {
       const all = staged.concat(gs.groups);
-      const r = checkMelds(s, 0, all);
+      const r = checkMelds(s, viewer, all);
       if (r.ok) { commitMelds(all); return; }
       if (r.short) {
-        // nur die Mindestpunktzahl fehlt: vormerken
-        const single = checkMelds({ ...s, initial: [true, true] }, 0, all);
-        if (!single.ok) { toast(single.err.replace(/<[^>]+>/g, ''), 3800); return; }
+        const single = checkMelds({ ...s, initial: [true, true] }, viewer, all);
+        if (!single.ok) { toast(plain(single.err), 3800); return; }
         staged = all; sel = new Set();
         render();
         toast(`Vorgemerkt. Es fehlen noch ${r.short} Punkte für die Erstmeldung.`, 3000);
         return;
       }
-      toast(r.err.replace(/<[^>]+>/g, ''), 3800);
+      toast(plain(r.err), 3800);
       return;
     }
-    const r = checkMelds(s, 0, gs.groups);
-    if (!r.ok) { toast(r.err.replace(/<[^>]+>/g, ''), 3800); return; }
+    const r = checkMelds(s, viewer, gs.groups);
+    if (!r.ok) { toast(plain(r.err), 3800); return; }
     commitMelds(gs.groups);
   }
 
   function onMeldTap(m) {
     const s = g.s;
-    if (busy || s.turn !== 0 || s.phase !== 'meld') return;
+    if (!myTurn() || s.phase !== 'meld') return;
     if (!sel.size) { toast(`${m.cards.length} ${RANK_NAME[m.rank]}${m.cards.length >= 7 ? ' – eine Canasta' : `, noch ${7 - m.cards.length} bis zur Canasta`}.`); return; }
     const cards = selCards();
-    const r = checkMelds(s, 0, [{ cards, rank: m.rank }]);
-    if (!r.ok) { toast(r.err.replace(/<[^>]+>/g, ''), 3800); return; }
+    const r = checkMelds(s, viewer, [{ cards, rank: m.rank }]);
+    if (!r.ok) { toast(plain(r.err), 3800); return; }
     commitMelds([{ cards, rank: m.rank }]);
   }
 
   function commitMelds(groups) {
     const s = g.s;
-    const before = canastas(s, 0).length;
-    const wasInitial = s.initial[0];
-    const r = meld(s, 0, groups);
-    if (!r.ok) { toast(r.err.replace(/<[^>]+>/g, ''), 3800); return; }
+    const t = myTeam();
+    const before = canastas(s, t).length;
+    const wasInitial = s.initial[t];
+    const r = meld(s, viewer, groups);
+    if (!r.ok) { toast(plain(r.err), 3800); return; }
     staged = []; sel = new Set(); hint = null;
     persist();
     if (s.phase === 'done') return roundOver();
     if (!wasInitial) toast('Erstmeldung geschafft!');
-    if (canastas(s, 0).length > before) {
+    if (canastas(s, t).length > before) {
       toast('Canasta! 🎉', 2200);
       coachOnce('canasta', { title: 'Eure erste Canasta', text: s.need === 1 ? 'Jetzt dürft ihr ausgehen. Wer zuerst alle Karten los ist, bekommt 100 Punkte – aber die Karten auf der Hand des Partners zählen dann minus.' : 'Zu zweit braucht ihr zwei Canastas, um auszugehen.', ms: 8000 });
     }
@@ -329,13 +348,13 @@ export function mount(ui) {
 
   function onDiscard() {
     const s = g.s;
-    if (busy || s.turn !== 0 || s.phase !== 'meld' || sel.size !== 1) return;
+    if (!myTurn() || s.phase !== 'meld' || sel.size !== 1) return;
     const c = selCards()[0];
     if (staged.length) { staged = []; toast('Die vorgemerkte Erstmeldung hat nicht gereicht – die Karten bleiben auf der Hand.'); }
-    if (!canDiscard(s, 0, c)) { toast(s.need === 1 ? 'Mit der letzten Karte gehst du aus – dafür braucht ihr erst eine Canasta.' : 'Zum Ausgehen braucht ihr zwei Canastas.', 3600); return; }
+    if (!canDiscard(s, viewer, c)) { toast(s.need === 1 ? 'Mit der letzten Karte gehst du aus – dafür braucht ihr erst eine Canasta.' : 'Zum Ausgehen braucht ihr zwei Canastas.', 3600); return; }
     const before = pileFrozen(s);
     sel = new Set(); hint = null;
-    discard(s, 0, c);
+    discard(s, viewer, c);
     persist();
     if (s.phase === 'done') return roundOver();
     if (!before && pileFrozen(s)) coachOnce('freeze', { title: 'Ablage eingefroren', text: 'Mit einer Zwei oder einem Joker auf der Ablage ist sie eingefroren: Wer sie nehmen will, braucht jetzt ein echtes Paar zur obersten Karte.', ms: 8000 });
@@ -343,7 +362,7 @@ export function mount(ui) {
     advance();
   }
 
-  // ---------- Computer ----------
+  // ---------- Ablauf ----------
   async function advance() {
     const my = ++token;
     const alive = () => !ui.destroyed && my === token;
@@ -351,9 +370,21 @@ export function mount(ui) {
     while (alive()) {
       const s = g.s;
       if (s.phase === 'done') { busy = false; roundOver(); return; }
-      if (s.turn === 0) { busy = false; render(); maybeCoachDraw(); return; }
-      busy = true; render();
       const p = s.turn;
+      if (isHuman(p)) {
+        if (p !== viewer) {
+          busy = true; ui.coach.hide();
+          if (multi()) {
+            render();
+            await handover(players()[p].name, 'Deine Karten werden gleich aufgedeckt. Die anderen schauen bitte weg.');
+            if (!alive()) return;
+          }
+          viewer = p; sel = new Set(); staged = []; hint = null;
+        }
+        busy = false; render(); maybeCoachDraw();
+        return;
+      }
+      busy = true; render();
       await sleep(delay(700));
       if (!alive()) return;
       let d = aiDraw(s, p, lv);
@@ -363,7 +394,7 @@ export function mount(ui) {
         const n = s.pile.length;
         takePile(s, p, d.take);
         bubble(p, `nimmt ${n} Karten!`, 2200);
-        if (n >= 8 && teamOf(p) === 1 && ui.coachOn()) coachOnce('bigpile', { title: 'Große Ablage weg', text: 'Eine große Ablage ist viel wert. Halte die Ablage klein oder friere sie mit einer Zwei ein, wenn die Gegner passende Paare haben könnten.', ms: 8000 });
+        if (n >= 8 && teamOf(p) !== myTeam() && ui.coachOn()) coachOnce('bigpile', { title: 'Große Ablage weg', text: 'Eine große Ablage ist viel wert. Halte die Ablage klein oder friere sie mit einer Zwei ein, wenn die Gegner passende Paare haben könnten.', ms: 8000 });
       } else if (s.stock.length) {
         drawStock(s, p);
         bubble(p, s.drawN === 2 ? 'zieht zwei' : 'zieht', 1000);
@@ -403,8 +434,8 @@ export function mount(ui) {
 
   function maybeCoachDraw() {
     const s = g.s;
-    if (!ui.coachOn() || s.phase !== 'draw' || s.turn !== 0) return;
-    const pl = pilePlans(s, 0);
+    if (!ui.coachOn() || s.phase !== 'draw' || !myTurn()) return;
+    const pl = pilePlans(s, viewer);
     if (pl.length && s.pile.length >= 3) ui.coach.say({ title: 'Die Ablage wartet', text: `Du könntest die Ablage nehmen – ${s.pile.length} Karten. Viele Karten heißt: mehr Meldungen und schneller zur Canasta.`, ms: 6000 });
   }
 
@@ -421,8 +452,9 @@ export function mount(ui) {
     if (!s.counted) {
       s.counted = true;
       if (s.totals[0] >= TARGET || s.totals[1] >= TARGET) {
-        g.over = s.totals[0] >= s.totals[1] ? 'win' : 'lose';
-        addResult('kanaster', g.over === 'win');
+        g.over = true;
+        g.winTeam = s.totals[0] >= s.totals[1] ? 0 : 1;
+        if (humans().length === 1) addResult('kanaster', g.winTeam === teamOf(humans()[0]));
       }
       persist();
     }
@@ -433,28 +465,36 @@ export function mount(ui) {
   async function showResult() {
     const s = g.s;
     if (!s.result) return;
+    const mt = myTeam(), ot = theirTeam();
     const col = r => h('div', { class: 'res-col' },
-      h('h4', {}, r.team === 0 ? (N() === 4 ? 'Wir' : 'Du') : (N() === 4 ? 'Sie' : 'Lotte')),
+      h('h4', {}, teamLabel(r.team)),
       h('table', { class: 'result-table' }, r.lines.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td', { class: 'num' }, (v > 0 ? '+' : '') + v))),
         h('tr', { class: 'total' }, h('td', {}, 'Runde'), h('td', { class: 'num' }, String(r.total)))));
-    const how = s.goneOut >= 0 ? `${s.goneOut === 0 ? 'Du bist' : nameOf(s.goneOut) + ' ist'} ausgegangen.` : 'Der Talon ist aufgebraucht.';
-    const title = g.over ? (g.over === 'win' ? 'Spiel gewonnen!' : 'Spiel verloren') : 'Rundenende';
-    const content = h('div', { class: 'result' },
-      g.over ? h('p', { class: 'result-big ' + (g.over === 'win' ? 'win' : 'lose') }, g.over === 'win' ? `${N() === 4 ? 'Ihr habt' : 'Du hast'} ${TARGET} Punkte erreicht!` : `${N() === 4 ? 'Die Gegner haben' : 'Lotte hat'} ${TARGET} Punkte erreicht.`) : null,
-      h('p', {}, how),
-      h('div', { class: 'res-cols' }, col(s.result[0]), col(s.result[1])),
-      h('p', { html: `Gesamt: <b>${s.totals[0]}</b> : <b>${s.totals[1]}</b> (Ziel ${TARGET})` }));
+    const how = s.goneOut >= 0 ? `${isYou(s.goneOut) ? 'Du bist' : nameOf(s.goneOut) + ' ist'} ausgegangen.` : 'Der Talon ist aufgebraucht.';
+    let title = 'Rundenende', big = null;
+    if (g.over) {
+      if (g.winTeam === undefined) g.winTeam = s.totals[0] >= s.totals[1] ? 0 : 1;
+      const w = g.winTeam;
+      const names = [...Array(N()).keys()].filter(p => teamOf(p) === w).map(nameOf).join(' & ');
+      const verb = names.includes('&') ? 'haben' : names === 'Du' ? 'hast' : 'hat';
+      title = multi() ? `${names} ${names.includes('&') ? 'gewinnen' : 'gewinnt'}` : (w === mt ? 'Spiel gewonnen!' : 'Spiel verloren');
+      big = h('p', { class: 'result-big ' + (multi() || w === mt ? 'win' : 'lose') }, `${names} ${verb} ${TARGET} Punkte erreicht!`);
+    }
+    const content = h('div', { class: 'result' }, big, h('p', {}, how),
+      h('div', { class: 'res-cols' }, col(s.result[mt]), col(s.result[ot])),
+      h('p', { html: `Gesamt: ${teamLabel(mt)} <b>${s.totals[mt]}</b> : <b>${s.totals[ot]}</b> ${teamLabel(ot)} (Ziel ${TARGET})` }));
     const v = await dialog({ title, content, buttons: [{ label: 'Tisch ansehen', value: 'look' }, { label: g.over ? 'Neues Spiel' : 'Nächste Runde', value: 'next', primary: true }], dismissable: true });
     if (v === 'next') nextRound();
   }
 
   async function showScores() {
     const s = g.s;
+    const mt = myTeam(), ot = theirTeam();
     await dialog({ title: 'Punktestand', content: h('div', {},
       h('table', { class: 'result-table' },
-        h('tr', {}, h('td', {}, N() === 4 ? 'Wir (du & Karl)' : 'Du'), h('td', { class: 'num' }, String(s.totals[0]))),
-        h('tr', {}, h('td', {}, N() === 4 ? 'Sie (Lotte & Hanne)' : 'Lotte'), h('td', { class: 'num' }, String(s.totals[1])))),
-      h('p', { class: 'small' }, `Gespielt wird bis ${TARGET}. Eure nächste Erstmeldung braucht ${minimum(s, 0)} Punkte.`)),
+        h('tr', {}, h('td', {}, teamLabel(mt, true)), h('td', { class: 'num' }, String(s.totals[mt]))),
+        h('tr', {}, h('td', {}, teamLabel(ot, true)), h('td', { class: 'num' }, String(s.totals[ot])))),
+      h('p', { class: 'small' }, `Gespielt wird bis ${TARGET}. Eure nächste Erstmeldung braucht ${minimum(s, mt)} Punkte.`)),
     buttons: [{ label: 'OK', value: true, primary: true }], dismissable: true });
   }
 
@@ -469,9 +509,10 @@ export function mount(ui) {
   // ---------- Tipp ----------
   function tip() {
     const s = g.s;
-    if (s.turn !== 0 || s.phase === 'done' || busy) { ui.coach.say({ title: 'Tipp', text: 'Tipps gibt es, wenn du am Zug bist.', ms: 2500 }); return; }
+    const me = viewer;
+    if (!myTurn() || s.phase === 'done') { ui.coach.say({ title: 'Tipp', text: 'Tipps gibt es, wenn du am Zug bist.', ms: 2500 }); return; }
     if (s.phase === 'draw') {
-      const d = aiDraw(s, 0, 'schwer');
+      const d = aiDraw(s, me, 'schwer');
       hint = d.take ? { pile: true } : { stock: true };
       render();
       ui.coach.say({ title: d.take ? 'Nimm die Ablage' : 'Zieh vom Talon', text: d.why || 'Hier lohnt sich die Ablage nicht – zieh lieber vom Talon.',
@@ -479,32 +520,31 @@ export function mount(ui) {
       return;
     }
     staged = []; sel = new Set();
-    const out = aiGoOut(s, 0);
+    const out = aiGoOut(s, me);
     if (out) {
       hint = { cards: out.groups.flatMap(x => x.cards) };
       render();
       ui.coach.say({ title: 'Du kannst ausgehen!', text: 'Melde alle Karten (die letzte darfst du abwerfen). Ausgehen bringt 100 Punkte und beendet die Runde.', actions: [{ label: 'Ausführen', primary: true, onClick: () => {
-        if (out.groups.length) { const r = meld(s, 0, out.groups); if (!r.ok) return; }
-        if (s.phase !== 'done' && out.discard) discard(s, 0, out.discard);
+        if (out.groups.length) { const r = meld(s, me, out.groups); if (!r.ok) return; }
+        if (s.phase !== 'done' && out.discard) discard(s, me, out.discard);
         persist();
         if (s.phase === 'done') roundOver(); else { render(); advance(); }
       } }] });
       return;
     }
-    const m = aiMelds(s, 0, 'schwer');
+    const m = aiMelds(s, me, 'schwer');
     if (m.groups.length) {
-      hint = { cards: m.groups.flatMap(x => x.cards), meld: m.groups.find(x => x.rank && s.melds[0].some(mm => mm.rank === x.rank))?.rank };
+      hint = { cards: m.groups.flatMap(x => x.cards), meld: m.groups.find(x => x.rank && s.melds[myTeam()].some(mm => mm.rank === x.rank))?.rank };
       render();
       ui.coach.say({ title: 'Melden', text: m.why.slice(0, 3), actions: [{ label: 'Ausführen', primary: true, onClick: () => commitMelds(m.groups) }] });
       return;
     }
-    const dc = aiDiscard(s, 0, 'schwer');
+    const dc = aiDiscard(s, me, 'schwer');
     hint = { cards: [dc.card] };
     render();
-    const minInfo = !s.initial[0] ? ` Für eine Erstmeldung (${minimum(s, 0)} Punkte) reicht deine Hand noch nicht.` : '';
+    const minInfo = !s.initial[myTeam()] ? ` Für eine Erstmeldung (${minimum(s, myTeam())} Punkte) reicht deine Hand noch nicht.` : '';
     ui.coach.say({ title: `Wirf ${cardName(dc.card)} ab`, text: dc.why + minInfo, actions: [{ label: 'Ausführen', primary: true, onClick: () => {
-      const i = hand().indexOf(dc.card);
-      sel = new Set([i]);
+      sel = new Set([hand().indexOf(dc.card)]);
       onDiscard();
     } }] });
   }
@@ -512,24 +552,31 @@ export function mount(ui) {
   // ---------- Menü ----------
   ui.onTip = tip;
   ui.onNew = async () => {
+    const n0 = g ? g.s.n : 4;
     const r = await dialog({ title: 'Neues Spiel', body: 'Wie viele spielen mit? Der Punktestand beginnt bei 0.', layout: 'list', buttons: [
-      { label: 'Zu viert', sub: 'Du und Karl gegen Lotte und Hanne', value: 4, primary: ui.option('players', 4) === 4 },
-      { label: 'Zu zweit', sub: 'Du gegen Lotte – je 15 Karten, zwei Canastas zum Ausgehen', value: 2, primary: ui.option('players', 4) === 2 },
+      { label: 'Zu viert', sub: 'zwei Teams mit Partner', value: 4, primary: n0 === 4 },
+      { label: 'Zu zweit', sub: 'je 15 Karten, zwei Canastas zum Ausgehen', value: 2, primary: n0 === 2 },
       { label: 'Abbrechen', value: null, quiet: true }] });
     if (!r) return;
+    const cur = g && g.players && g.players.length === r ? g.players : DEFAULTS[r];
+    const pl = await choosePlayers({ title: r === 4 ? 'Kanaster zu viert' : 'Kanaster zu zweit', min: r, max: r, current: cur,
+      note: r === 4 ? 'Platz 1 & 3 spielen gegen Platz 2 & 4. Freie Plätze übernimmt der Computer.' : 'Zu zweit: Mensch gegen Computer oder zwei Menschen an einem iPhone.' });
+    if (!pl) return;
     ui.setOption('players', r);
-    token++; g = null; fresh(false); render(); advance();
+    token++; ui.coach.hide();
+    g = null; fresh(false, pl); render(); advance();
   };
 
   const ro = new ResizeObserver(() => renderHand());
   ro.observe(handEl);
 
   if (!g || !g.s) fresh(false);
+  else viewer = !multi() && isHuman(g.s.turn) ? g.s.turn : (humans()[0] ?? 0);
   render();
   advance();
-  coachOnce('welcome', { title: 'Willkommen beim Kanaster', text: [
+  if (!multi()) coachOnce('welcome', { title: 'Willkommen beim Kanaster', text: [
     `Sammelt Karten gleichen Rangs und meldet sie. Sieben gleiche sind eine <b>Canasta</b> – erst mit ${g.s.need === 1 ? 'einer' : 'zwei'} Canasta${g.s.need === 1 ? '' : 's'} darf man ausgehen.`,
-    'Joker und Zweien sind Joker. Pro Zug: ziehen (oder die Ablage nehmen), melden, eine Karte abwerfen.'], ms: 12000 });
+    'Joker und Zweien sind Joker. Pro Zug: ziehen (oder die Ablage nehmen), melden, eine Karte abwerfen. Mit Freunden spielen: Menü → „Neues Spiel“.'], ms: 12000 });
 
   return () => { token++; ro.disconnect(); };
 }

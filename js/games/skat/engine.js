@@ -145,6 +145,7 @@ export function bidAction(s, p, action) {
     return;
   }
   if (b.wait === 'say') {
+    if (action === 'say' && !nextBid(b.value)) action = 'pass';
     if (action === 'say') {
       b.value = nextBid(b.value);
       b.said[p] = String(b.value);

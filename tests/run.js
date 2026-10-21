@@ -1,5 +1,5 @@
 // Minimaler Testläufer ohne Abhängigkeiten.
-const files = process.argv.slice(2).length ? process.argv.slice(2) : ['chess', 'backgammon', 'skat', 'doppelkopf', 'canasta'];
+const files = process.argv.slice(2).length ? process.argv.slice(2) : ['chess', 'backgammon', 'skat', 'doppelkopf', 'canasta', 'kniffel', 'qwixx'];
 let fail = 0, pass = 0;
 for (const f of files) {
   let mod;

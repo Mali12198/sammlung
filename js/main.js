@@ -4,11 +4,13 @@ import { load, settings, setSetting, stats } from './store.js';
 import { gameScreen } from './shell.js';
 
 const GAMES = [
-  { id: 'backgammon', name: 'Backgammon', tag: 'Würfeln, ziehen, auswürfeln. Du gegen den Computer.', color: 'var(--box-backgammon)', art: artBackgammon },
-  { id: 'schach', name: 'Schach', tag: 'Die klassische Partie, drei Spielstärken.', color: 'var(--box-chess)', art: artChess },
+  { id: 'backgammon', name: 'Backgammon', tag: 'Würfeln, ziehen, auswürfeln. Gegen den Computer oder zu zweit.', color: 'var(--box-backgammon)', art: artBackgammon },
+  { id: 'schach', name: 'Schach', tag: 'Die klassische Partie – gegen den Computer oder zu zweit.', color: 'var(--box-chess)', art: artChess },
   { id: 'kanaster', name: 'Kanaster', tag: 'Melden und Canastas bauen. Zu viert mit Partner oder zu zweit.', color: 'var(--box-canasta)', art: artCanasta },
-  { id: 'doppelkopf', name: 'Doppelkopf', tag: 'Re oder Kontra? Du und drei Computer am Tisch.', color: 'var(--box-doko)', art: artDoko },
-  { id: 'skat', name: 'Skat', tag: 'Reizen, drücken, ausspielen. Gegen zwei Computer.', color: 'var(--box-skat)', art: artSkat },
+  { id: 'doppelkopf', name: 'Doppelkopf', tag: 'Re oder Kontra? Zu viert, mit Computern oder Freunden.', color: 'var(--box-doko)', art: artDoko },
+  { id: 'skat', name: 'Skat', tag: 'Reizen, drücken, ausspielen. Zu dritt, mit Computern oder Freunden.', color: 'var(--box-skat)', art: artSkat },
+  { id: 'kniffel', name: 'Kniffel', tag: 'Drei Würfe, dreizehn Felder. Allein auf Bestwert oder bis zu sechst.', color: 'var(--box-kniffel)', art: artKniffel },
+  { id: 'qwixx', name: 'Qwixx', tag: 'Kreuzen, was die Würfel hergeben. Zwei bis fünf Spieler.', color: 'var(--box-qwixx)', art: artQwixx },
 ];
 
 const MODULES = {
@@ -17,6 +19,8 @@ const MODULES = {
   kanaster: () => import('./games/canasta/view.js'),
   doppelkopf: () => import('./games/doppelkopf/view.js'),
   skat: () => import('./games/skat/view.js'),
+  kniffel: () => import('./games/kniffel/view.js'),
+  qwixx: () => import('./games/qwixx/view.js'),
 };
 const RULES = {
   backgammon: () => import('./games/backgammon/rules.js'),
@@ -24,6 +28,8 @@ const RULES = {
   kanaster: () => import('./games/canasta/rules.js'),
   doppelkopf: () => import('./games/doppelkopf/rules.js'),
   skat: () => import('./games/skat/rules.js'),
+  kniffel: () => import('./games/kniffel/rules.js'),
+  qwixx: () => import('./games/qwixx/rules.js'),
 };
 
 const app = document.getElementById('app');
@@ -57,6 +63,27 @@ function artBackgammon() {
   }
   const die = (x, y, r, pips) => `<g transform="translate(${x} ${y}) rotate(${r})"><rect x="-13" y="-13" width="26" height="26" rx="5" fill="#f7f0e2" stroke="rgba(0,0,0,.3)"/>${pips.map(([a, b]) => `<circle cx="${a}" cy="${b}" r="2.8" fill="#1b2130"/>`).join('')}</g>`;
   return `<svg viewBox="0 0 100 90">${tri}${die(36, 66, -12, [[-6, -6], [0, 0], [6, 6]])}${die(66, 64, 10, [[-6, -6], [6, -6], [-6, 6], [6, 6], [0, 0]])}</svg>`;
+}
+function die(x, y, r, v, fill = '#f7f0e2', pip = '#1b2130') {
+  const P = { 1: [[0, 0]], 2: [[-6, -6], [6, 6]], 3: [[-6, -6], [0, 0], [6, 6]], 4: [[-6, -6], [6, -6], [-6, 6], [6, 6]], 5: [[-6, -6], [6, -6], [0, 0], [-6, 6], [6, 6]], 6: [[-6, -7], [6, -7], [-6, 0], [6, 0], [-6, 7], [6, 7]] }[v];
+  return `<g transform="translate(${x} ${y}) rotate(${r})"><rect x="-13" y="-13" width="26" height="26" rx="5" fill="${fill}" stroke="rgba(0,0,0,.3)"/>${P.map(([a, b]) => `<circle cx="${a}" cy="${b}" r="2.7" fill="${pip}"/>`).join('')}</g>`;
+}
+function artKniffel() {
+  return `<svg viewBox="0 0 100 90">${die(22, 58, -14, 6)}${die(44, 40, 8, 6)}${die(66, 60, -6, 6)}${die(84, 34, 16, 6)}${die(50, 72, 20, 6, '#e9cf8a')}</svg>`;
+}
+function artQwixx() {
+  const rows = [['#c8322d', 0], ['#e3b31d', 1], ['#2e8b4a', 2], ['#2b5fa8', 3]];
+  let o = '';
+  for (const [col, k] of rows) {
+    const y = 10 + k * 18;
+    o += `<rect x="6" y="${y}" width="88" height="15" rx="3" fill="${col}"/>`;
+    for (let i = 0; i < 6; i++) {
+      const x = 10 + i * 14;
+      o += `<rect x="${x}" y="${y + 2}" width="11" height="11" rx="2" fill="rgba(255,255,255,.85)"/>`;
+      if ((k + i) % 3 === 0 || (k === 1 && i < 3)) o += `<path d="M${x + 2.5} ${y + 4.5} l6 6 M${x + 8.5} ${y + 4.5} l-6 6" stroke="#1b2130" stroke-width="1.8" stroke-linecap="round"/>`;
+    }
+  }
+  return `<svg viewBox="0 0 100 90">${o}</svg>`;
 }
 function artChess() {
   return `<svg viewBox="0 0 100 90"><svg x="22" y="0" width="74" height="86" viewBox="0 0 100 100" fill="#f4ecdd"><use href="#p-N"/></svg>
@@ -93,7 +120,7 @@ function renderHome() {
     h('div', { class: 'home-head' },
       h('div', {},
         h('h1', { class: 'home-title' }, 'Spielesammlung'),
-        h('p', { class: 'home-sub' }, 'Fünf Klassiker gegen den Computer. Mit Regelheft und einem Trainer, der dir über die Schulter schaut.')),
+        h('p', { class: 'home-sub' }, 'Sieben Klassiker gegen den Computer oder mit Freunden an einem iPhone. Mit Regelheft und einem Trainer, der dir über die Schulter schaut.')),
       iconButton('gear', 'Einstellungen', openSettings)),
     shelf,
     h('p', { class: 'home-foot' }, 'Tipp: Über „Teilen → Zum Home-Bildschirm“ wird die Sammlung zur App auf deinem iPhone.'));

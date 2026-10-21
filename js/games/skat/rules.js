@@ -141,7 +141,8 @@ export default {
 <h3>Tipp und Trainer</h3>
 <p>Die Glühbirne hilft in jeder Phase: beim Reizen, beim Drücken und beim Ausspielen (mit Begründung). Der Trainer meldet sich, wenn eine andere Karte deutlich besser gewesen wäre.</p>
 <h3>Spielstärke</h3>
-<p><b>Leicht</b> reizt gern zu hoch und spielt manchmal planlos. <b>Mittel</b> spielt nach bewährten Faustregeln. <b>Schwer</b> rechnet vor jeder Karte viele mögliche Verteilungen durch.</p>`,
+<p><b>Leicht</b> reizt gern zu hoch und spielt manchmal planlos. <b>Mittel</b> spielt nach bewährten Faustregeln. <b>Schwer</b> rechnet vor jeder Karte viele mögliche Verteilungen durch.</p>
+<h3>Mit Freunden spielen</h3><p>Menü → „Neues Spiel“: Stell zwei oder alle drei Plätze auf <b>Mensch</b>. Freie Plätze übernimmt der Computer. Wer an der Reihe ist, sieht seine Karten unten; vorher erscheint ein Schirm „Gib das iPhone weiter an …“, damit niemand fremde Karten sieht.</p>`,
     },
   ],
 };

@@ -18,10 +18,13 @@ export function mount(ui) {
   let st, sel = null, busy = false, hint = null, flipped = false;
   const ui$ = {};
 
-  function fresh(color) {
-    g = { fens: [START_FEN], sans: [], last: [], player: color, over: null };
+  function fresh(color, mode = 'cpu', names = null, flip = false) {
+    g = { fens: [START_FEN], sans: [], last: [], player: color, over: null, mode, names: names || { w: 'Weiß', b: 'Schwarz' }, flip };
     persist();
   }
+  const two = () => g.mode === 'two';
+  const COLOR_DE = { w: 'Weiß', b: 'Schwarz' };
+  const nameOfColor = c => (two() ? g.names[c] : (c === g.player ? 'Du' : 'Computer'));
   function persist() { if (g && !g.over) save('save:schach', g); else remove('save:schach'); }
   const cur = () => fromFEN(g.fens[g.fens.length - 1]);
   const positions = () => g.fens.map(f => f.split(' ').slice(0, 4).join(' '));
@@ -58,7 +61,7 @@ export function mount(ui) {
   // ---------- Darstellung ----------
   function render() {
     st = cur();
-    flipped = g.player === 'b';
+    flipped = two() ? (g.flip && st.turn === 'b') : g.player === 'b';
     const legal = sel != null ? legalMoves(st).filter(m => m.from === sel) : [];
     const last = g.last.length ? g.last[g.last.length - 1] : null;
     const chk = inCheck(st) ? kingSq(st.b, st.turn) : -1;
@@ -84,10 +87,11 @@ export function mount(ui) {
     renderPlayers();
     renderMoves();
     const stt = g.over;
-    if (stt) status.innerHTML = `<b>${stt.reason}</b> – ${stt.result === '½-½' ? 'Remis' : (stt.result === '1-0') === (g.player === 'w') ? 'du hast gewonnen' : 'der Computer hat gewonnen'}`;
+    if (stt) status.innerHTML = `<b>${stt.reason}</b> – ${stt.result === '½-½' ? 'Remis' : two() ? `${nameOfColor(stt.result === '1-0' ? 'w' : 'b')} gewinnt` : (stt.result === '1-0') === (g.player === 'w') ? 'du hast gewonnen' : 'der Computer hat gewonnen'}`;
     else if (busy) status.textContent = 'Der Computer überlegt …';
+    else if (two()) status.innerHTML = `${inCheck(st) ? '<b>Schach!</b> ' : ''}<b>${nameOfColor(st.turn)}</b> (${COLOR_DE[st.turn]}) ist am Zug.`;
     else status.innerHTML = st.turn === g.player ? (inCheck(st) ? '<b>Schach!</b> Du bist am Zug.' : 'Du bist am Zug.') : 'Der Computer ist am Zug.';
-    ui.setSubtitle(`Computer ${LEVEL_NAME[ui.level()]}`);
+    ui.setSubtitle(two() ? 'Zu zweit' : `Computer ${LEVEL_NAME[ui.level()]}`);
   }
 
   function material(color) {
@@ -101,7 +105,7 @@ export function mount(ui) {
   }
 
   function renderPlayers() {
-    const me = g.player, ai = me === 'w' ? 'b' : 'w';
+    const me = two() ? (flipped ? 'b' : 'w') : g.player, ai = me === 'w' ? 'b' : 'w';
     const mMe = material(me), mAi = material(ai);
     const row = (el, name, color, capturedFrom, diff) => {
       const caps = h('span', { class: 'caps' }, capturedFrom.lost.map(t => pieceSvg(color === 'w' ? t.toLowerCase() : t)));
@@ -109,8 +113,8 @@ export function mount(ui) {
         h('span', { class: 'who' + (st.turn === color && !g.over ? ' on' : '') }, h('i', { class: 'swatch ' + color }), name),
         caps, diff > 0 ? h('span', { class: 'adv' }, '+' + Math.round(diff / 100)) : '');
     };
-    row(topRow, 'Computer', ai, mMe, mAi.val - mMe.val);
-    row(botRow, 'Du', me, mAi, mMe.val - mAi.val);
+    row(topRow, nameOfColor(ai), ai, mMe, mAi.val - mMe.val);
+    row(botRow, nameOfColor(me), me, mAi, mMe.val - mAi.val);
   }
 
   function renderMoves() {
@@ -128,7 +132,7 @@ export function mount(ui) {
   async function onSquare(i) {
     if (busy || g.over) return;
     st = cur();
-    if (st.turn !== g.player) { ui.coach.hide(); computerTurn(); return; }
+    if (!two() && st.turn !== g.player) { ui.coach.hide(); computerTurn(); return; }
     const p = st.b[i];
     if (sel != null) {
       const cands = legalMoves(st).filter(m => m.from === sel && m.to === i);
@@ -144,7 +148,7 @@ export function mount(ui) {
         return;
       }
     }
-    if (p && colorOf(p) === g.player) {
+    if (p && colorOf(p) === (two() ? st.turn : g.player)) {
       sel = sel === i ? null : i;
       render();
     } else if (sel != null) { sel = null; render(); }
@@ -178,6 +182,7 @@ export function mount(ui) {
       ui.coach.say(review);
       if (review.kind === 'warn') return; // Spieler entscheidet: zurücknehmen oder weiter
     } else ui.coach.hide();
+    if (two()) { if (g.flip) toast(`${nameOfColor(cur().turn)} ist dran`, 1400); return; }
     await computerTurn();
   }
 
@@ -194,7 +199,7 @@ export function mount(ui) {
       const reasons = explainMove(before, best.move);
       let why = '';
       const after = cloneState(before); makeMove(after, m);
-      const hang = hangingPieces(after, g.player);
+      const hang = hangingPieces(after, before.turn);
       if (isMateScore(played) && played < 0) why = 'Danach kann der Computer dich mattsetzen.';
       else if (hang.length) why = `Danach steht ${hang.map(x => 'dein ' + PIECE_DE[typeOf(x.piece)] + ' auf ' + sqName(x.sq)).slice(0, 2).join(' und ')} ungeschützt.`;
       else why = severe ? 'Damit verlierst du Material.' : 'Es gibt einen deutlich besseren Zug.';
@@ -217,6 +222,7 @@ export function mount(ui) {
   }
 
   async function computerTurn() {
+    if (two()) return;
     st = cur();
     if (g.over || st.turn === g.player) return;
     busy = true; render();
@@ -243,6 +249,12 @@ export function mount(ui) {
     if (g.over) g.over = null;
     // bis der Spieler wieder am Zug ist
     let steps = 0;
+    if (two()) {
+      if (g.fens.length > 1) { g.fens.pop(); g.sans.pop(); g.last.pop(); steps = 1; }
+      if (!steps && !silent) toast('Nichts zum Zurücknehmen');
+      sel = null; hint = null; persist(); render();
+      return;
+    }
     while (g.fens.length > 1 && (steps === 0 || fromFEN(g.fens[g.fens.length - 1]).turn !== g.player)) {
       g.fens.pop(); g.sans.pop(); g.last.pop(); steps++;
       if (n && steps >= n && fromFEN(g.fens[g.fens.length - 1]).turn === g.player) break;
@@ -256,7 +268,7 @@ export function mount(ui) {
   function tip() {
     if (busy || g.over) return;
     st = cur();
-    if (st.turn !== g.player) return;
+    if (!two() && st.turn !== g.player) return;
     busy = true; render();
     setTimeout(() => {
       const r = search(st, { depth: 4, timeMs: 1200 });
@@ -278,6 +290,14 @@ export function mount(ui) {
     render();
     const o = g.over;
     const won = o.result !== '½-½' && (o.result === '1-0') === (g.player === 'w');
+    if (two()) {
+      remove('save:schach');
+      await sleep(500);
+      const winner = o.result === '½-½' ? null : (o.result === '1-0' ? 'w' : 'b');
+      const r2 = await dialog({ title: winner ? `${nameOfColor(winner)} gewinnt!` : 'Remis', body: `${o.reason}.`, buttons: [{ label: 'Brett ansehen', value: 'look' }, { label: 'Neue Partie', value: 'new', primary: true }] });
+      if (r2 === 'new') newGame();
+      return;
+    }
     addResult('schach', won);
     remove('save:schach');
     await sleep(500);
@@ -291,15 +311,40 @@ export function mount(ui) {
 
   async function newGame() {
     const c = await dialog({
-      title: 'Neue Partie', body: 'Mit welcher Farbe willst du spielen? Weiß beginnt.', layout: 'list',
-      buttons: [{ label: 'Weiß', value: 'w', primary: true }, { label: 'Schwarz', value: 'b' }, { label: 'Zufall', value: 'r' }, { label: 'Abbrechen', value: null, quiet: true }],
+      title: 'Neue Partie', body: 'Gegen den Computer – mit welcher Farbe? Weiß beginnt. Oder ihr spielt zu zweit an einem iPhone.', layout: 'list',
+      buttons: [{ label: 'Weiß', sub: 'gegen den Computer', value: 'w', primary: true }, { label: 'Schwarz', sub: 'gegen den Computer', value: 'b' }, { label: 'Zufall', sub: 'gegen den Computer', value: 'r' },
+        { label: 'Zu zweit', sub: 'zwei Menschen, ein iPhone', value: 'two' }, { label: 'Abbrechen', value: null, quiet: true }],
     });
     if (!c) return;
+    if (c === 'two') {
+      const names = await askNames();
+      if (!names) return;
+      ui.coach.hide();
+      fresh('w', 'two', { w: names.w, b: names.b }, names.flip);
+      sel = null; hint = null; busy = false;
+      render();
+      return;
+    }
     ui.coach.hide();
     fresh(c === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : c);
     sel = null; hint = null; busy = false;
     render();
     if (g.player === 'b') computerTurn();
+  }
+
+  async function askNames() {
+    const saved = load('playerNames', []);
+    const wIn = h('input', { type: 'text', class: 'name-input', value: (g && two() ? g.names.w : saved[0]) || 'Spieler 1', maxlength: '12', 'aria-label': 'Name für Weiß' });
+    const bIn = h('input', { type: 'text', class: 'name-input', value: (g && two() ? g.names.b : saved[1]) || 'Spieler 2', maxlength: '12', 'aria-label': 'Name für Schwarz' });
+    const flip = h('input', { type: 'checkbox', class: 'switch' });
+    flip.checked = !!(g && g.flip);
+    const content = h('div', { class: 'players-form' },
+      h('div', { class: 'player-row is-human' }, h('i', { class: 'swatch w' }), wIn, h('span', { class: 'small' }, 'Weiß')),
+      h('div', { class: 'player-row is-human' }, h('i', { class: 'swatch b' }), bIn, h('span', { class: 'small' }, 'Schwarz')),
+      h('label', { class: 'switch-row' }, h('span', {}, 'Brett mitdrehen', h('small', {}, 'Wer am Zug ist, sieht seine Figuren unten')), flip));
+    const ok = await dialog({ title: 'Zu zweit', content, buttons: [{ label: 'Abbrechen', value: false }, { label: 'Los geht’s', value: true, primary: true }], dismissable: true });
+    if (!ok) return null;
+    return { w: wIn.value.trim() || 'Weiß', b: bIn.value.trim() || 'Schwarz', flip: flip.checked };
   }
 
   ui.onTip = tip;

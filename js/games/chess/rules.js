@@ -92,7 +92,8 @@ export default {
 <p>Ist der Trainer an (Menü oben rechts), prüft er jeden deiner Züge. Verlierst du dadurch Material oder übersiehst ein Matt, meldet er sich und bietet an, den Zug zurückzunehmen. Er warnt dich außerdem, wenn eine deiner Figuren angegriffen und nicht gedeckt ist.</p>
 <h3>Spielstärke</h3>
 <p><b>Leicht</b> rechnet kaum voraus und macht absichtlich Fehler. <b>Mittel</b> rechnet etwa vier Halbzüge. <b>Schwer</b> rechnet so tief, wie es in gut zwei Sekunden geht.</p>
-<p>Deine Partie wird automatisch gespeichert – du kannst die App jederzeit schließen.</p>`,
+<p>Deine Partie wird automatisch gespeichert – du kannst die App jederzeit schließen.</p>
+<h3>Zu zweit</h3><p>Menü → „Neues Spiel“ → „Zu zweit“: Ihr gebt eure Namen ein und spielt abwechselnd am selben iPhone. Mit „Brett mitdrehen“ sieht immer der Spieler am Zug seine Figuren unten. „Zurücknehmen“ nimmt dann genau einen Halbzug zurück.</p>`,
     },
   ],
 };

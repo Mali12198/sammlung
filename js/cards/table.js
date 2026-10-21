@@ -21,13 +21,13 @@ export function cardTable(ui, { names, positions }) {
 
   const seats = [];
   for (let i = 1; i < n; i++) {
-    const nameEl = h('span', { class: 'name' }, h('span', { class: 'turn-dot' }), names[i]);
+    const nameEl = h('span', { class: 'name' }, h('span', { class: 'turn-dot' }), h('span', { class: 'nm' }, names[i]));
     const role = h('div', { class: 'role' });
     const mini = h('div', { class: 'mini-hand' });
     const open = h('div', { class: 'open-hand' });
     const bubbleSlot = h('div', { class: 'bubble-slot' });
     const el = h('div', { class: 'seat ' + positions[i] }, nameEl, role, mini, open, bubbleSlot);
-    seats[i] = { el, role, mini, open, bubbleSlot, count: -1, timer: null };
+    seats[i] = { el, role, mini, open, bubbleSlot, nameEl, count: -1, timer: null };
     seatsEl.append(el);
   }
   seatsEl.append(trickEl, pillL, pillR, center);
@@ -36,6 +36,16 @@ export function cardTable(ui, { names, positions }) {
 
   const api = {
     felt, handEl, status, actions, center, pillL, pillR, trickEl, positions,
+    // Namen je Sitzplatz (Index = Platz auf dem Bildschirm, 0 = unten)
+    setNames(list) {
+      for (let i = 1; i < n; i++) {
+        const st = seats[i];
+        st.nameEl.querySelector('.nm').textContent = list[i];
+        st.count = -1;
+        st.bubbleSlot.replaceChildren();
+      }
+      trickEl.replaceChildren();
+    },
     setSeat(i, { role, on, count, open, openCards }) {
       const s = seats[i];
       if (!s) return;

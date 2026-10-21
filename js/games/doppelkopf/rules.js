@@ -116,7 +116,8 @@ export default {
 <h3>Ansagen</h3>
 <p>Solange es erlaubt ist, erscheint über deinen Karten ein Knopf „Re“ bzw. „Kontra“, danach „keine 90“ usw.</p>
 <h3>Tipp und Trainer</h3>
-<p>Die Glühbirne schlägt dir eine Karte vor und erklärt sie. Ist der Trainer an, siehst du deine Partei und eure Augen und bekommst Hinweise nach deinen Zügen.</p>`,
+<p>Die Glühbirne schlägt dir eine Karte vor und erklärt sie. Ist der Trainer an, siehst du deine Partei und eure Augen und bekommst Hinweise nach deinen Zügen.</p>
+<h3>Mit Freunden spielen</h3><p>Menü → „Neues Spiel“: Bis zu vier Plätze auf <b>Mensch</b> stellen, der Rest spielt der Computer. Vor jedem Wechsel erscheint „Gib das iPhone weiter an …“ – erst dann werden die Karten aufgedeckt. Ansagen macht jeder, wenn er das iPhone hat.</p>`,
     },
   ],
 };

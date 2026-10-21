@@ -95,7 +95,8 @@ export default {
 <h3>Abwerfen</h3>
 <p>Genau eine Karte wählen und <b>Abwerfen</b> tippen. Damit endet dein Zug.</p>
 <h3>Tipp und Trainer</h3>
-<p>Die Glühbirne schlägt dir in jeder Phase den nächsten Schritt vor (mit Begründung) und kann ihn auf Wunsch ausführen. Über das Menü startest du ein neues Spiel zu viert oder zu zweit.</p>`,
+<p>Die Glühbirne schlägt dir in jeder Phase den nächsten Schritt vor (mit Begründung) und kann ihn auf Wunsch ausführen. Über das Menü startest du ein neues Spiel zu viert oder zu zweit.</p>
+<h3>Mit Freunden spielen</h3><p>Menü → „Neues Spiel“ → zu viert oder zu zweit, dann die Plätze auf <b>Mensch</b> oder <b>Computer</b> stellen. Zu viert spielen Platz 1 & 3 gegen Platz 2 & 4 – ihr könnt also auch zu zweit als Team gegen zwei Computer antreten. Vor jedem Wechsel zwischen Menschen wird die Hand verdeckt.</p>`,
     },
   ],
 };

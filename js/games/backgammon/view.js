@@ -1,6 +1,7 @@
 // Backgammon – Oberfläche
 import { h, svgEl, dialog, toast, sleep } from '../../ui.js';
 import { load, save, remove, addResult, delay } from '../../store.js';
+import { choosePlayers } from '../../players.js';
 import {
   newState, cloneState, legalPaths, applyStep, winner, winFactor, pips, persp,
   chooseTurn, rankTurns, aiShouldDouble, aiShouldTake, winProb, turnText, explainTurn,
@@ -33,10 +34,15 @@ export function mount(ui) {
     g = {
       s: newState(), phase: 'start', dice: [], done: [], turnStart: null, paths: [], maxLen: 0,
       score: keepScore && old ? old.score : [0, 0], lastAi: '', over: null, openDice: null,
+      mode: old ? old.mode || 'cpu' : 'cpu', names: old ? old.names || ['Du', 'Computer'] : ['Du', 'Computer'], cur: 0,
     };
     persist();
   }
   function persist() { save('save:backgammon', g); }
+  const two = () => g.mode === 'two';
+  const side = () => g.cur || 0;
+  const nm = k => (two() ? g.names[k] : (k === 0 ? 'Du' : 'Computer'));
+  const verb = (k, du, er) => (nm(k) === 'Du' ? du : er);
 
   // ---------- Aufbau ----------
   const info = h('div', { class: 'bg-info' });
@@ -124,7 +130,7 @@ export function mount(ui) {
           const cy = top ? FR + CS / 2 + (n - 1) * step : H - FR - CS / 2 - (n - 1) * step;
           out += `<text x="${x + COLW / 2}" y="${cy + 4}" font-size="11" font-weight="700" text-anchor="middle" fill="${side === 0 ? '#1b2130' : '#f4ecdd'}">${n}</text>`;
         }
-        if (srcSet.has(String(idx)) && sel == null && side === 0) {
+        if (srcSet.has(String(idx)) && sel == null && side === g.cur) {
           const k = n - 1;
           const cy = top ? FR + CS / 2 + Math.min(k, maxShow - 1) * (n > maxShow ? step : CS) : H - FR - CS / 2 - Math.min(k, maxShow - 1) * (n > maxShow ? step : CS);
           out += `<circle cx="${x + COLW / 2}" cy="${n > maxShow ? (top ? FR + CS / 2 + (n - 1) * step : H - FR - CS / 2 - (n - 1) * step) : cy}" r="${CS / 2 + 1.5}" fill="none" stroke="#e2c67e" stroke-width="2" opacity=".85"/>`;
@@ -138,17 +144,19 @@ export function mount(ui) {
     const bx = BARX + BAR / 2;
     for (let k = 0; k < s.bar[1]; k++) out += checker(bx, MIDY - 40 - k * (CS - 4), 1);
     for (let k = 0; k < s.bar[0]; k++) out += checker(bx, MIDY + 40 + k * (CS - 4), 0, sel === 'bar' ? 'opacity="1"' : '');
-    if (sel === 'bar') out += `<rect x="${BARX + 1}" y="${MIDY + 20}" width="${BAR - 2}" height="${MIDY - 30}" rx="4" fill="none" stroke="#e2c67e" stroke-width="2"/>`;
-    if (srcSet.has('bar') && sel == null) out += `<rect x="${BARX + 1}" y="${MIDY + 20}" width="${BAR - 2}" height="${MIDY - 30}" rx="4" fill="none" stroke="#e2c67e" stroke-width="1.5" stroke-dasharray="3 3"/>`;
-    out += `<rect data-hit="bar" x="${BARX}" y="${MIDY}" width="${BAR}" height="${MIDY - FR}" fill="transparent"/>`;
+    const barY = side() === 0 ? MIDY + 20 : FR + 10;
+    if (sel === 'bar') out += `<rect x="${BARX + 1}" y="${barY}" width="${BAR - 2}" height="${MIDY - 30}" rx="4" fill="none" stroke="#e2c67e" stroke-width="2"/>`;
+    if (srcSet.has('bar') && sel == null) out += `<rect x="${BARX + 1}" y="${barY}" width="${BAR - 2}" height="${MIDY - 30}" rx="4" fill="none" stroke="#e2c67e" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    out += `<rect data-hit="bar" x="${BARX}" y="${side() === 0 ? MIDY : FR}" width="${BAR}" height="${MIDY - FR}" fill="transparent"/>`;
 
     // Abgetragene Steine (Ablage)
     const tx = TRAYX + TRAY / 2;
     for (let k = 0; k < s.off[0]; k++) out += `<rect x="${TRAYX + 5}" y="${H - FR - 6 - k * 7}" width="${TRAY - 10}" height="5.5" rx="2" fill="#f6efe1" stroke="rgba(0,0,0,.3)" stroke-width=".6"/>`;
     for (let k = 0; k < s.off[1]; k++) out += `<rect x="${TRAYX + 5}" y="${FR + 1 + k * 7}" width="${TRAY - 10}" height="5.5" rx="2" fill="#2b2f3a" stroke="#c9a24b" stroke-width=".6"/>`;
-    if (tgtSet.has('off')) out += `<rect x="${TRAYX + 2}" y="${MIDY}" width="${TRAY - 4}" height="${MIDY - FR}" rx="4" fill="rgba(127,211,143,.4)" stroke="#7fd38f" stroke-width="2"/>`;
-    if (hintTo.has('off')) out += `<rect x="${TRAYX + 2}" y="${MIDY}" width="${TRAY - 4}" height="${MIDY - FR}" rx="4" fill="none" stroke="#7fd38f" stroke-width="2.5"/>`;
-    out += `<rect data-hit="off" x="${TRAYX}" y="${MIDY}" width="${TRAY}" height="${MIDY - FR}" fill="transparent"/>`;
+    const offY = side() === 0 ? MIDY : FR;
+    if (tgtSet.has('off')) out += `<rect x="${TRAYX + 2}" y="${offY}" width="${TRAY - 4}" height="${MIDY - FR}" rx="4" fill="rgba(127,211,143,.4)" stroke="#7fd38f" stroke-width="2"/>`;
+    if (hintTo.has('off')) out += `<rect x="${TRAYX + 2}" y="${offY}" width="${TRAY - 4}" height="${MIDY - FR}" rx="4" fill="none" stroke="#7fd38f" stroke-width="2.5"/>`;
+    out += `<rect data-hit="off" x="${TRAYX}" y="${offY}" width="${TRAY}" height="${MIDY - FR}" fill="transparent"/>`;
 
     // Doppelwürfel
     const cy = g.s.cubeOwner === -1 ? MIDY : g.s.cubeOwner === 0 ? MIDY + 70 : MIDY - 70;
@@ -160,7 +168,7 @@ export function mount(ui) {
       out += dieSvg(colX(2) + COLW / 2, MIDY, g.openDice[1], 1, false);
       out += dieSvg(colX(8) + COLW / 2, MIDY, g.openDice[0], 0, false);
     } else if (g.dice.length) {
-      const side = g.phase === 'ai' ? 1 : 0;
+      const side = g.phase === 'ai' ? 1 : side0();
       const baseX = side === 0 ? colX(9) : colX(3);
       const used = usedDice();
       const list = g.dice[0] === g.dice[1] ? [g.dice[0], g.dice[0], g.dice[0], g.dice[0]] : g.dice;
@@ -190,20 +198,20 @@ export function mount(ui) {
   function renderInfo() {
     const s = g.s;
     info.replaceChildren(
-      h('span', {}, 'Du ', h('b', {}, String(g.score[0])), ' : ', h('b', {}, String(g.score[1])), ' Computer'),
+      h('span', {}, nm(0) + ' ', h('b', {}, String(g.score[0])), ' : ', h('b', {}, String(g.score[1])), ' ' + nm(1)),
       h('span', { class: 'pip' }, `noch ${pips(s, 0)} : ${pips(s, 1)} Augen`));
-    ui.setSubtitle(`Computer ${ui.level()}`);
+    ui.setSubtitle(two() ? 'Zu zweit' : `Computer ${ui.level()}`);
   }
 
   function renderControls() {
     const btns = [];
     let txt = '';
     if (g.phase === 'start') {
-      txt = g.openDice ? (g.openDice[0] > g.openDice[1] ? 'Du beginnst mit diesem Wurf.' : 'Der Computer beginnt.') : 'Wer beginnt? Jeder würfelt einmal.';
+      txt = g.openDice ? (g.openDice[0] > g.openDice[1] ? `${nm(0)} ${verb(0, 'beginnst', 'beginnt')} mit diesem Wurf.` : `${nm(1)} ${verb(1, 'beginnst', 'beginnt')}.`) : 'Wer beginnt? Jeder würfelt einmal.';
       if (!g.openDice) btns.push(h('button', { class: 'btn btn-primary', onclick: openingRoll }, 'Auswürfeln'));
     } else if (g.phase === 'roll') {
-      txt = 'Du bist dran.';
-      const canDouble = (g.s.cubeOwner === -1 || g.s.cubeOwner === 0) && g.s.cube < 64;
+      txt = two() ? `<b>${nm(side())}</b> ist dran (${side() === 0 ? 'helle' : 'dunkle'} Steine).` : 'Du bist dran.';
+      const canDouble = (g.s.cubeOwner === -1 || g.s.cubeOwner === side()) && g.s.cube < 64;
       if (canDouble) btns.push(h('button', { class: 'btn', onclick: playerDoubles }, `Verdoppeln auf ${g.s.cube * 2}`));
       btns.push(h('button', { class: 'btn btn-primary', onclick: playerRoll }, 'Würfeln'));
     } else if (g.phase === 'move') {
@@ -259,6 +267,7 @@ export function mount(ui) {
     return [...res.entries()].map(([to, steps]) => ({ to: to === 'off' ? 'off' : Number(to), steps }));
   }
 
+  function side0() { return g.cur || 0; }
   function onBoardClick(e) {
     const hit = e.target.closest('[data-hit]');
     if (!hit || busy) return;
@@ -285,7 +294,7 @@ export function mount(ui) {
   }
 
   function doSteps(steps) {
-    for (const st of steps) { applyStep(g.s, 0, st); g.done.push(st); }
+    for (const st of steps) { applyStep(g.s, side(), st); g.done.push(st); }
     sel = null;
     const more = candidates().length > 0;
     g.phase = more ? 'move' : 'confirm';
@@ -305,16 +314,16 @@ export function mount(ui) {
 
   async function confirmTurn() {
     if (ui.coachOn() && g.paths.length > 1) {
-      const ranked = rankTurns(g.turnStart, 0, g.dice, ui.level() === 'schwer');
+      const ranked = rankTurns(g.turnStart, side(), g.dice, ui.level() === 'schwer' || two());
       const myKey = keyOf(g.s);
-      const mine = ranked.find(x => keyOfP(x.t.P) === myKey);
+      const mine = ranked.find(x => keyAfter(x.t.steps) === myKey);
       const best = ranked[0];
       if (mine && best && mine !== best && best.v - mine.v > 7) {
-        const reasons = explainTurn(g.turnStart, 0, best.t);
+        const reasons = explainTurn(g.turnStart, side(), best.t);
         ui.coach.say({
           title: best.v - mine.v > 18 ? 'Das ist riskant' : 'Es gibt einen besseren Zug',
           kind: 'warn',
-          text: [`Stärker wäre <b>${turnText(best.t.steps, 0)}</b>.`, reasons[0]],
+          text: [`Stärker wäre <b>${turnText(best.t.steps, side())}</b>.`, reasons[0]],
           actions: [
             { label: 'Nochmal ziehen', primary: true, onClick: () => { resetTurn(); hintSteps = best.t.steps; render(); } },
             { label: 'So lassen', onClick: () => endPlayerTurn() },
@@ -328,14 +337,22 @@ export function mount(ui) {
     endPlayerTurn();
   }
 
-  function keyOfP(P) {
-    // Perspektive Seite 0 entspricht echten Indizes
-    return P.p.join(',') + '|' + P.bar + ',' + P.obar + '|' + P.off + ',' + P.ooff;
+  function keyAfter(steps) {
+    const c = cloneState(g.turnStart);
+    for (const st of steps) applyStep(c, side(), st);
+    return keyOf(c);
   }
 
   async function endPlayerTurn() {
     g.done = []; g.dice = []; g.paths = []; g.turnStart = null; sel = null; hintSteps = null;
     if (checkWin()) return;
+    if (two()) {
+      g.cur = 1 - side();
+      g.phase = 'roll';
+      persist(); render();
+      toast(`${nm(g.cur)} ist dran`, 1500);
+      return;
+    }
     g.phase = 'ai'; g.lastAi = '';
     persist(); render();
     await aiTurn();
@@ -349,22 +366,34 @@ export function mount(ui) {
 
   function startPlayerMove(dice) {
     g.dice = dice;
-    const lp = legalPaths(g.s, 0, dice);
+    const lp = legalPaths(g.s, side(), dice);
     g.paths = lp.paths; g.maxLen = lp.maxLen; g.done = []; g.turnStart = cloneState(g.s);
     if (!lp.maxLen) {
       g.phase = 'move'; render();
-      toast(g.s.bar[0] ? 'Du kannst nicht einwürfeln – alle Felder sind zu.' : 'Mit diesem Wurf ist kein Zug möglich.');
+      toast(g.s.bar[side()] ? `${nm(side())} ${verb(side(), 'kannst', 'kann')} nicht einwürfeln – alle Felder sind zu.` : 'Mit diesem Wurf ist kein Zug möglich.');
       setTimeout(() => endPlayerTurn(), delay(1400));
       persist();
       return;
     }
     g.phase = 'move';
-    if (g.s.bar[0]) sel = 'bar';
+    if (g.s.bar[side()]) sel = 'bar';
     persist(); render();
   }
 
   async function playerDoubles() {
     if (busy) return;
+    if (two()) {
+      const me = side(), op = 1 - me;
+      const r = await dialog({
+        title: `${nm(me)} verdoppelt auf ${g.s.cube * 2}`,
+        body: `<b>${nm(op)}</b>, nimmst du an? Dann geht es um ${g.s.cube * 2} Punkte und du bekommst den Doppelwürfel. Gibst du auf, bekommt ${nm(me)} ${g.s.cube}.`,
+        buttons: [{ label: 'Aufgeben', value: 'drop' }, { label: 'Annehmen', value: 'take', primary: true }],
+      });
+      if (r === 'drop') { finishGame(me, g.s.cube, `${nm(op)} hat aufgegeben`); return; }
+      g.s.cube *= 2; g.s.cubeOwner = op;
+      persist(); render();
+      return;
+    }
     busy = true;
     await sleep(delay(500));
     const take = aiShouldTake(g.s, 1);
@@ -441,14 +470,14 @@ export function mount(ui) {
   async function finishGame(w, points, why) {
     g.score[w] += points;
     g.phase = 'over';
-    const txt = `${w === 0 ? 'Du gewinnst' : 'Der Computer gewinnt'} ${points} ${points === 1 ? 'Punkt' : 'Punkte'}${why ? ' – ' + why : ''}.`;
+    const txt = `${nm(w)} ${verb(w, 'gewinnst', 'gewinnt')} ${points} ${points === 1 ? 'Punkt' : 'Punkte'}${why ? ' – ' + why : ''}.`;
     g.over = txt;
-    addResult('backgammon', w === 0);
+    if (!two()) addResult('backgammon', w === 0);
     persist(); render();
     await sleep(400);
     const r = await dialog({
-      title: w === 0 ? 'Gewonnen!' : 'Verloren',
-      body: `${txt}<br>Stand: Du ${g.score[0]} : ${g.score[1]} Computer.`,
+      title: two() ? `${nm(w)} ${verb(w, 'gewinnst', 'gewinnt')}!` : w === 0 ? 'Gewonnen!' : 'Verloren',
+      body: `${txt}<br>Stand: ${nm(0)} ${g.score[0]} : ${g.score[1]} ${nm(1)}.`,
       buttons: [{ label: 'Brett ansehen', value: 'look' }, { label: 'Nächste Partie', value: 'next', primary: true }],
     });
     if (r === 'next') { fresh(true); render(); }
@@ -463,29 +492,31 @@ export function mount(ui) {
     await sleep(delay(1300));
     if (ui.destroyed) return;
     g.openDice = null;
-    if (a > b) startPlayerMove([a, b]);
+    if (a > b) { g.cur = 0; startPlayerMove([a, b]); }
+    else if (two()) { g.cur = 1; startPlayerMove([a, b]); }
     else { g.phase = 'ai'; g.dice = [a, b]; busy = true; persist(); await runAiMove(); }
   }
 
   // ---------- Tipp ----------
   function tip() {
     if (g.phase === 'roll') {
-      const p = Math.round(winProb(g.s, 0) * 100);
-      const canDouble = (g.s.cubeOwner === -1 || g.s.cubeOwner === 0) && g.s.cube < 64;
+      const me = side();
+      const p = Math.round(winProb(g.s, me) * 100);
+      const canDouble = (g.s.cubeOwner === -1 || g.s.cubeOwner === me) && g.s.cube < 64;
       ui.coach.say({ title: 'Lage vor dem Wurf', text: [
-        `Deine Gewinnchance schätze ich auf etwa <b>${p} %</b> (Augen: du ${pips(g.s, 0)}, Computer ${pips(g.s, 1)}).`,
+        `${two() ? nm(me) + ': deine' : 'Deine'} Gewinnchance schätze ich auf etwa <b>${p} %</b> (Augen: ${nm(me)} ${pips(g.s, me)}, ${nm(1 - me)} ${pips(g.s, 1 - me)}).`,
         canDouble ? (p >= 70 ? 'Das ist stark genug zum <b>Verdoppeln</b>.' : 'Zum Verdoppeln brauchst du etwa 70 %. Erst mal würfeln.') : 'Den Doppelwürfel hat gerade der Computer.'] });
       return;
     }
     if (g.phase !== 'move' && g.phase !== 'confirm') { ui.coach.say({ title: 'Tipp', text: 'Tipps gibt es, wenn du am Zug bist.', ms: 2500 }); return; }
-    const ranked = rankTurns(g.turnStart, 0, g.dice, true);
+    const ranked = rankTurns(g.turnStart, side(), g.dice, true);
     if (!ranked.length) return;
     const best = ranked[0].t;
     hintSteps = best.steps;
     render();
     ui.coach.say({
-      title: 'Vorschlag: ' + turnText(best.steps, 0),
-      text: explainTurn(g.turnStart, 0, best).slice(0, 2),
+      title: 'Vorschlag: ' + turnText(best.steps, side()),
+      text: explainTurn(g.turnStart, side(), best).slice(0, 2),
       actions: [{ label: 'Ausführen', primary: true, onClick: async () => {
         resetTurn();
         hintSteps = null;
@@ -496,8 +527,23 @@ export function mount(ui) {
 
   ui.onTip = tip;
   ui.onNew = async () => {
-    const r = await dialog({ title: 'Neue Partie?', body: 'Die laufende Partie wird abgebrochen. Der Punktestand bleibt erhalten.', buttons: [{ label: 'Abbrechen', value: false }, { label: 'Neue Partie', value: true, primary: true }] });
-    if (r) { ui.coach.hide(); fresh(true); busy = false; render(); }
+    const r = await dialog({ title: 'Neue Partie', body: 'Die laufende Partie wird abgebrochen.', layout: 'list', buttons: [
+      { label: 'Gegen den Computer', sub: two() ? 'neuer Punktestand' : 'Punktestand bleibt', value: 'cpu', primary: !two() },
+      { label: 'Zu zweit', sub: 'zwei Menschen, ein iPhone', value: 'two', primary: two() },
+      { label: 'Abbrechen', value: null, quiet: true }] });
+    if (!r) return;
+    if (r === 'two') {
+      const pl = await choosePlayers({ title: 'Backgammon zu zweit', min: 2, max: 2, labels: ['hell', 'dunkel'], current: two() ? g.names.map(n => ({ name: n, human: true })) : [{ name: 'Spieler 1', human: true }, { name: 'Spieler 2', human: true }], note: 'Hell zieht nach unten rechts, Dunkel nach oben rechts.' });
+      if (!pl) return;
+      const keep = two() && pl.every((p, i) => p.name === g.names[i]);
+      ui.coach.hide(); fresh(keep);
+      g.mode = 'two'; g.names = pl.map(p => p.name);
+    } else {
+      const keep = !two();
+      ui.coach.hide(); fresh(keep);
+      g.mode = 'cpu'; g.names = ['Du', 'Computer'];
+    }
+    busy = false; persist(); render();
   };
   ui.menuExtra = () => h('div', { class: 'btn-row', style: { justifyContent: 'flex-start', marginTop: '6px' } },
     h('button', { class: 'btn btn-quiet', onclick: e => { g.score = [0, 0]; persist(); render(); e.target.textContent = 'Punktestand ist zurückgesetzt'; } }, 'Punktestand zurücksetzen'));
