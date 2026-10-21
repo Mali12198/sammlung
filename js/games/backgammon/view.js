@@ -29,14 +29,14 @@ export function mount(ui) {
   let g = load('save:backgammon');
   let sel = null, hintSteps = null, busy = false;
 
-  function fresh(keepScore = true) {
+  function fresh(keepScore = true, keep = true) {
     const old = g;
     g = {
       s: newState(), phase: 'start', dice: [], done: [], turnStart: null, paths: [], maxLen: 0,
       score: keepScore && old ? old.score : [0, 0], lastAi: '', over: null, openDice: null,
       mode: old ? old.mode || 'cpu' : 'cpu', names: old ? old.names || ['Du', 'Computer'] : ['Du', 'Computer'], cur: 0,
     };
-    persist();
+    if (keep) persist();
   }
   function persist() { save('save:backgammon', g); }
   const two = () => g.mode === 'two';
@@ -526,36 +526,60 @@ export function mount(ui) {
   }
 
   ui.onTip = tip;
-  ui.onNew = async () => {
-    const r = await dialog({ title: 'Neue Partie', body: 'Die laufende Partie wird abgebrochen.', layout: 'list', buttons: [
-      { label: 'Gegen den Computer', sub: two() ? 'neuer Punktestand' : 'Punktestand bleibt', value: 'cpu', primary: !two() },
-      { label: 'Zu zweit', sub: 'zwei Menschen, ein iPhone', value: 'two', primary: two() },
-      { label: 'Abbrechen', value: null, quiet: true }] });
-    if (!r) return;
-    if (r === 'two') {
-      const pl = await choosePlayers({ title: 'Backgammon zu zweit', min: 2, max: 2, labels: ['hell', 'dunkel'], current: two() ? g.names.map(n => ({ name: n, human: true })) : [{ name: 'Spieler 1', human: true }, { name: 'Spieler 2', human: true }], note: 'Hell zieht nach unten rechts, Dunkel nach oben rechts.' });
-      if (!pl) return;
-      const keep = two() && pl.every((p, i) => p.name === g.names[i]);
-      ui.coach.hide(); fresh(keep);
-      g.mode = 'two'; g.names = pl.map(p => p.name);
-    } else {
-      const keep = !two();
-      ui.coach.hide(); fresh(keep);
-      g.mode = 'cpu'; g.names = ['Du', 'Computer'];
+  ui.onNew = () => setup(false);
+
+  async function setup(entry) {
+    const running = entry && hadSave && (g.phase !== 'start' || g.score[0] + g.score[1] > 0);
+    for (;;) {
+      const r = await dialog({
+        title: entry ? 'Backgammon – wie willst du spielen?' : 'Neue Partie',
+        body: entry ? '' : 'Die laufende Partie wird abgebrochen.', layout: 'list', dismissable: !entry, buttons: [
+          ...(running ? [{ label: 'Weiterspielen', sub: `${two() ? `${g.names[0]} gegen ${g.names[1]}` : 'gegen den Computer'} · Stand ${g.score[0]} : ${g.score[1]}`, value: 'resume', primary: true }] : []),
+          { label: running ? 'Neu gegen den Computer' : 'Gegen den Computer', sub: g.score[0] + g.score[1] > 0 ? (two() ? 'neuer Punktestand' : 'Punktestand bleibt') : 'du spielst die hellen Steine', value: 'cpu', primary: !running && !two() },
+          { label: running ? 'Neu zu zweit' : 'Zu zweit', sub: 'zwei Menschen, ein iPhone', value: 'two', primary: !running && two() },
+          { label: entry ? 'Zur Sammlung' : 'Abbrechen', value: null, quiet: true }] });
+      if (r === 'resume') { resumeGame(); return; }
+      if (!r) { if (entry) location.hash = '#/'; return; }
+      if (r === 'two') {
+        const pl = await choosePlayers({ title: 'Backgammon zu zweit', min: 2, max: 2, labels: ['hell', 'dunkel'], current: two() ? g.names.map(n => ({ name: n, human: true })) : [{ name: 'Spieler 1', human: true }, { name: 'Spieler 2', human: true }], note: 'Hell zieht nach unten rechts, Dunkel nach oben rechts.' });
+        if (!pl) { if (entry) continue; return; }   // zurück zur Auswahl
+        const keep = hadSave && two() && pl.every((p, i) => p.name === g.names[i]);
+        ui.coach.hide(); fresh(keep);
+        g.mode = 'two'; g.names = pl.map(p => p.name);
+      } else {
+        const keep = hadSave && !two();
+        ui.coach.hide(); fresh(keep);
+        g.mode = 'cpu'; g.names = ['Du', 'Computer'];
+      }
+      hadSave = true;
+      busy = false; persist(); render(); welcome();
+      return;
     }
-    busy = false; persist(); render();
-  };
+  }
+
+  function resumeGame() {
+    // Unterbrochener Computerzug: neu würfeln
+    if (aiPending && g.phase === 'roll') { g.phase = 'ai'; aiTurn(); }
+    welcome();
+  }
+
+  function welcome() {
+    if (ui.coachOn() && !two() && g.phase === 'start' && g.score[0] + g.score[1] === 0) {
+      ui.coach.say({ title: 'So geht’s', text: 'Du spielst die hellen Steine und ziehst gegen den Uhrzeigersinn nach unten rechts in dein Heimfeld. Tippe einen Stein an, dann das grüne Ziel.', ms: 9000 });
+    }
+  }
+
   ui.menuExtra = () => h('div', { class: 'btn-row', style: { justifyContent: 'flex-start', marginTop: '6px' } },
     h('button', { class: 'btn btn-quiet', onclick: e => { g.score = [0, 0]; persist(); render(); e.target.textContent = 'Punktestand ist zurückgesetzt'; } }, 'Punktestand zurücksetzen'));
 
-  if (!g) fresh(false);
-  // Laufender Computerzug nach Neustart: neu würfeln
-  if (g.phase === 'ai') { g.phase = 'roll'; g.dice = []; g.done = []; persist(); setTimeout(() => { g.phase = 'ai'; aiTurn(); }, 300); }
+  // Zuerst immer der Startbildschirm: Weiterspielen oder neu (gegen Computer / zu zweit).
+  let hadSave = !!g;
+  if (!g) fresh(false, false);
+  const aiPending = g.phase === 'ai';
+  if (aiPending) { g.phase = 'roll'; g.dice = []; g.done = []; }
   if (g.phase === 'start') g.openDice = null;
   render();
   requestAnimationFrame(sizeBoard);
-  if (ui.coachOn() && g.phase === 'start' && g.score[0] + g.score[1] === 0) {
-    ui.coach.say({ title: 'So geht’s', text: 'Du spielst die hellen Steine und ziehst gegen den Uhrzeigersinn nach unten rechts in dein Heimfeld. Tippe einen Stein an, dann das grüne Ziel.', ms: 9000 });
-  }
+  setup(true);
   return () => ro.disconnect();
 }

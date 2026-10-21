@@ -18,7 +18,9 @@ vor jeder Karte viele mögliche Verteilungen durch; beim Kniffel prüft der Comp
 
 ## Mit Freunden spielen
 
-Über Menü → **Neues Spiel** stellst du jeden Platz auf *Mensch* oder *Computer* und gibst Namen ein.
+Beim Öffnen eines Spiels erscheint zuerst der Startbildschirm (auch über Menü → **Neues Spiel**):
+*Weiterspielen*, *Gegen Computer* oder *Nur Menschen* – jeden Platz kannst du auf *Mensch* oder
+*Computer* stellen und Namen eingeben.
 Gespielt wird an einem iPhone, das reihum weitergereicht wird. Bei Kartenspielen erscheint vor jedem
 Wechsel ein Schirm „Gib das iPhone weiter an …“ – erst nach dem Antippen werden die Karten des
 nächsten Spielers aufgedeckt, und der Tisch dreht sich in seine Sicht.

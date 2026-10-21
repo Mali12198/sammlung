@@ -87,7 +87,10 @@ export function mount(ui) {
     return parts.join(' · ');
   }
 
+  // Solange der Startbildschirm offen ist und mehrere Menschen spielen, bleiben die Karten verdeckt.
+  let veiled = true;
   function render() {
+    if (!g || !g.s || (veiled && multi())) return;
     const s = g.s;
     for (let sl = 1; sl < N; sl++) {
       const p = seatAt(sl);
@@ -493,12 +496,7 @@ export function mount(ui) {
 
   // ---------- Menü ----------
   ui.onTip = tip;
-  ui.onNew = async () => {
-    const pl = await choosePlayers({ title: 'Neue Liste – wer spielt?', min: 4, max: 4, current: players(), note: 'Doppelkopf spielt man zu viert. Freie Plätze übernimmt der Computer, alle Konten beginnen bei 0.' });
-    if (!pl) return;
-    token++; ui.coach.hide(); table.clearBubbles();
-    g = null; fresh(false, pl); render(); advance();
-  };
+  ui.onNew = () => setup(false);
   ui.menuExtra = () => {
     const sw = (key, label, small) => {
       const i = h('input', { type: 'checkbox', class: 'switch', onchange: e => { ui.setOption(key, e.target.checked); render(); } });
@@ -514,11 +512,35 @@ export function mount(ui) {
   const ro = new ResizeObserver(() => render());
   ro.observe(table.handEl);
 
-  if (!g || !g.s) fresh(false);
-  else setViewer(!multi() && isHuman(actor()) ? actor() : (humans()[0] ?? 0));
-  render();
-  advance();
-  if (!multi()) coachOnce('welcome', { title: 'Willkommen beim Doppelkopf', text: ['Ihr spielt zu viert, meistens zwei gegen zwei. Wer eine <b>Kreuz-Dame</b> hat, gehört zur Partei <b>Re</b>, die anderen sind <b>Kontra</b> – wer zu wem gehört, ist am Anfang geheim.', 'Mit Freunden spielen: Menü → „Neues Spiel“. Die Glühbirne gibt Tipps, das Buch erklärt Trümpfe und Wertung.'], ms: 12000 });
+  function welcome() {
+    if (!multi()) coachOnce('welcome', { title: 'Willkommen beim Doppelkopf', text: ['Ihr spielt zu viert, meistens zwei gegen zwei. Wer eine <b>Kreuz-Dame</b> hat, gehört zur Partei <b>Re</b>, die anderen sind <b>Kontra</b> – wer zu wem gehört, ist am Anfang geheim.', 'Mit Freunden spielen: Menü → „Neues Spiel“. Die Glühbirne gibt Tipps, das Buch erklärt Trümpfe und Wertung.'], ms: 12000 });
+  }
+
+  async function setup(entry) {
+    const running = !!(g && g.s);
+    const pl = await choosePlayers({ title: entry ? 'Doppelkopf – wer spielt?' : 'Neue Liste – wer spielt?', min: 4, max: 4, current: players(), entry,
+      resume: entry && running ? 'Weiterspielen' : null, resumeSub: entry && running ? `${g.list.length + 1}. Spiel der Liste` : '',
+      note: 'Doppelkopf spielt man zu viert. Freie Plätze übernimmt der Computer. Neu starten setzt alle Konten auf 0.' });
+    if (pl === 'resume') { await resumeGame(); return; }
+    if (!pl) { if (entry) location.hash = '#/'; return; }
+    token++; ui.coach.hide(); table.clearBubbles();
+    veiled = false; g = null; fresh(false, pl); render(); advance(); welcome();
+  }
+
+  // Weiterspielen: bei mehreren Menschen erst das iPhone übergeben, dann aufdecken.
+  async function resumeGame() {
+    const a = actor();
+    const p = a >= 0 && isHuman(a) ? a : (humans()[0] ?? 0);
+    if (multi()) {
+      await handover(players()[p].name, 'Deine Karten werden gleich aufgedeckt. Die anderen schauen bitte weg.');
+      if (ui.destroyed) return;
+    }
+    veiled = false; setViewer(p); render(); advance(); welcome();
+  }
+
+  // Hinter dem Startbildschirm den Tisch zeigen – aber keine Karten, wenn mehrere Menschen spielen.
+  if (g && g.s && !multi()) { setViewer(humans()[0] ?? 0); render(); }
+  setup(true);
 
   return () => { token++; ro.disconnect(); };
 }

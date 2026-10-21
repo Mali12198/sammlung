@@ -161,7 +161,7 @@ async function renderGame(id) {
 
 async function route() {
   if (cleanup) { try { cleanup(); } catch (e) { console.error(e); } cleanup = null; }
-  document.querySelectorAll('.sheet, .sheet-backdrop, .dialog-backdrop, .toast').forEach(n => n.remove());
+  document.querySelectorAll('.sheet, .sheet-backdrop, .dialog-backdrop, .handover, .toast').forEach(n => n.remove());
   const id = (location.hash.replace(/^#\/?/, '') || '').split('/')[0];
   window.scrollTo(0, 0);
   if (!id) renderHome();

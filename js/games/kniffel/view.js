@@ -14,11 +14,11 @@ export function mount(ui) {
   let g = load('save:kniffel');
   let token = 0, busy = false, hint = null; // hint: { holds:[bool], cat }
 
-  function fresh(players) {
+  function fresh(players, keep = true) {
     const pl = players || (g && g.s.players) || [{ name: 'Du', human: true }, { name: 'Lotte', human: false }];
     g = { s: newGame(pl, { joker: ui.option('joker', true) }), counted: false };
     hint = null;
-    persist();
+    if (keep) persist();
   }
   function persist() { save('save:kniffel', g); }
 
@@ -113,7 +113,7 @@ export function mount(ui) {
     const acts = [];
     if (s.phase === 'done') {
       txt = winnerText();
-      acts.push(h('button', { class: 'btn', onclick: showResult }, 'Ergebnis'), h('button', { class: 'btn btn-primary', onclick: () => startNew(false) }, 'Neues Spiel'));
+      acts.push(h('button', { class: 'btn', onclick: showResult }, 'Ergebnis'), h('button', { class: 'btn btn-primary', onclick: () => startNew(true) }, 'Neues Spiel'));
     } else if (!cur().human || busy) {
       txt = `${youName(s.turn)} würfelt …`;
     } else {
@@ -269,20 +269,25 @@ export function mount(ui) {
         h('td', {}, `${k + 1}. ${youName(x.i)}`), h('td', { class: 'small' }, `oben ${x.t.upper}${x.t.bonus ? ' +35' : ''} · unten ${x.t.lower}${x.t.extra ? ' +' + x.t.extra : ''}`),
         h('td', { class: 'num' }, String(x.t.total))))));
     const v = await dialog({ title: 'Endstand', content, buttons: [{ label: 'Block ansehen', value: 'look' }, { label: 'Neues Spiel', value: 'new', primary: true }], dismissable: true });
-    if (v === 'new') startNew(false);
+    if (v === 'new') startNew(true);
   }
 
-  async function startNew(ask = true) {
-    const s = S();
-    let players = s.players;
+  async function startNew(ask = true, entry = false) {
+    let players = S().players;
     if (ask) {
-      players = await choosePlayers({ title: 'Kniffel – wer spielt?', min: 1, max: 6, current: s.players, note: 'Allein spielst du auf Bestwert. Gemischt geht auch: Menschen und Computer am selben iPhone.' });
-      if (!players) return;
+      const running = entry && hadSave && S().phase !== 'done';
+      const r = await choosePlayers({ title: 'Kniffel – wer spielt?', min: 1, max: 6, current: S().players, entry,
+        resume: running ? 'Weiterspielen' : null, resumeSub: running ? `Runde ${S().round} von 13` : '',
+        note: 'Allein spielst du auf Bestwert. Gemischt geht auch: Menschen und Computer am selben iPhone.' });
+      if (r === 'resume') { advance(); welcome(); return; }
+      if (!r) { if (entry) location.hash = '#/'; return; }
+      players = r;
     }
     token++; ui.coach.hide();
     fresh(players);
     render();
     advance();
+    welcome();
   }
 
   // ---------- Tipp ----------
@@ -319,10 +324,15 @@ export function mount(ui) {
       h('button', { class: 'btn btn-quiet', style: { marginTop: '8px' }, onclick: () => { save('kniffel:best', 0); toast('Bestwert gelöscht'); render(); } }, 'Bestwert zurücksetzen'));
   };
 
-  if (!g || !g.s) fresh();
+  function welcome() {
+    if (!hasRolled(S()) && S().round === 1 && S().turn === 0) coachOnce('welcome', { title: 'Willkommen beim Kniffel', text: ['Pro Runde hast du drei Würfe. Danach trägst du das Ergebnis in ein freies Feld des Blocks ein – jedes Feld nur einmal.', 'Ziel: möglichst viele Punkte nach 13 Runden. Die Glühbirne sagt dir, was du halten solltest.'], ms: 11000 });
+  }
+
+  // Zuerst immer der Startbildschirm: Weiterspielen oder neu (gegen Computer / Menschen).
+  const hadSave = !!(g && g.s);
+  if (!hadSave) fresh(null, false);
   render();
-  advance();
-  if (!hasRolled(S()) && S().round === 1 && S().turn === 0) coachOnce('welcome', { title: 'Willkommen beim Kniffel', text: ['Pro Runde hast du drei Würfe. Danach trägst du das Ergebnis in ein freies Feld des Blocks ein – jedes Feld nur einmal.', 'Ziel: möglichst viele Punkte nach 13 Runden. Die Glühbirne sagt dir, was du halten solltest.'], ms: 11000 });
+  startNew(true, true);
 
   function coachOnce(key, msg) {
     if (!ui.coachOn()) return;

@@ -76,7 +76,7 @@ export function dialog({ title, body, buttons = [{ label: 'OK', value: true, pri
     const dlg = h('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true' },
       title ? h('h2', {}, title) : null,
       body ? (typeof body === 'string' ? h('p', { html: body }) : body) : null,
-      content || null,
+      (typeof content === 'function' ? content(close) : content) || null,
       wrap);
     const bd = h('div', { class: 'dialog-backdrop', onclick: e => { if (dismissable && e.target === bd) close(null); } }, dlg);
     document.body.append(bd);

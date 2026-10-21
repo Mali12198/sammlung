@@ -117,7 +117,10 @@ export function mount(ui) {
     return [head, list];
   }
 
+  // Solange der Startbildschirm offen ist und mehrere Menschen spielen, bleiben die Karten verdeckt.
+  let veiled = true;
   function render() {
+    if (!g || !g.s || (veiled && multi())) return;
     const s = g.s;
     const mt = myTeam(), ot = theirTeam();
     pills.replaceChildren(
@@ -144,6 +147,7 @@ export function mount(ui) {
   }
 
   function renderHand() {
+    if (!g || !g.s || (veiled && multi())) return;
     const vis = visibleHand();
     const avail = Math.max(260, (handEl.clientWidth || 390) - 20);
     const rows = vis.length > 15 ? 2 : 1;
@@ -551,32 +555,57 @@ export function mount(ui) {
 
   // ---------- Menü ----------
   ui.onTip = tip;
-  ui.onNew = async () => {
-    const n0 = g ? g.s.n : 4;
-    const r = await dialog({ title: 'Neues Spiel', body: 'Wie viele spielen mit? Der Punktestand beginnt bei 0.', layout: 'list', buttons: [
-      { label: 'Zu viert', sub: 'zwei Teams mit Partner', value: 4, primary: n0 === 4 },
-      { label: 'Zu zweit', sub: 'je 15 Karten, zwei Canastas zum Ausgehen', value: 2, primary: n0 === 2 },
-      { label: 'Abbrechen', value: null, quiet: true }] });
-    if (!r) return;
-    const cur = g && g.players && g.players.length === r ? g.players : DEFAULTS[r];
-    const pl = await choosePlayers({ title: r === 4 ? 'Kanaster zu viert' : 'Kanaster zu zweit', min: r, max: r, current: cur,
-      note: r === 4 ? 'Platz 1 & 3 spielen gegen Platz 2 & 4. Freie Plätze übernimmt der Computer.' : 'Zu zweit: Mensch gegen Computer oder zwei Menschen an einem iPhone.' });
-    if (!pl) return;
-    ui.setOption('players', r);
-    token++; ui.coach.hide();
-    g = null; fresh(false, pl); render(); advance();
-  };
+  ui.onNew = () => setup(false);
 
   const ro = new ResizeObserver(() => renderHand());
   ro.observe(handEl);
 
-  if (!g || !g.s) fresh(false);
-  else viewer = !multi() && isHuman(g.s.turn) ? g.s.turn : (humans()[0] ?? 0);
-  render();
-  advance();
-  if (!multi()) coachOnce('welcome', { title: 'Willkommen beim Kanaster', text: [
-    `Sammelt Karten gleichen Rangs und meldet sie. Sieben gleiche sind eine <b>Canasta</b> – erst mit ${g.s.need === 1 ? 'einer' : 'zwei'} Canasta${g.s.need === 1 ? '' : 's'} darf man ausgehen.`,
-    'Joker und Zweien sind Joker. Pro Zug: ziehen (oder die Ablage nehmen), melden, eine Karte abwerfen. Mit Freunden spielen: Menü → „Neues Spiel“.'], ms: 12000 });
+  function welcome() {
+    if (!multi()) coachOnce('welcome', { title: 'Willkommen beim Kanaster', text: [
+      `Sammelt Karten gleichen Rangs und meldet sie. Sieben gleiche sind eine <b>Canasta</b> – erst mit ${g.s.need === 1 ? 'einer' : 'zwei'} Canasta${g.s.need === 1 ? '' : 's'} darf man ausgehen.`,
+      'Joker und Zweien sind Joker. Pro Zug: ziehen (oder die Ablage nehmen), melden, eine Karte abwerfen. Mit Freunden spielen: Menü → „Neues Spiel“.'], ms: 12000 });
+  }
+
+  // Weiterspielen: bei mehreren Menschen erst das iPhone übergeben, dann aufdecken.
+  async function resumeGame() {
+    const p = isHuman(g.s.turn) ? g.s.turn : (humans()[0] ?? 0);
+    if (multi()) {
+      await handover(players()[p].name, 'Deine Karten werden gleich aufgedeckt. Die anderen schauen bitte weg.');
+      if (ui.destroyed) return;
+    }
+    viewer = p; sel = new Set(); staged = []; hint = null; veiled = false;
+    render(); advance(); welcome();
+  }
+
+  async function setup(entry) {
+    const running = !!(g && g.s && !g.over);
+    for (;;) {
+      const n0 = g && g.s ? g.s.n : ui.option('players', 4);
+      const resume = entry && running;
+      const r = await dialog({
+        title: entry ? 'Kanaster – wie wollt ihr spielen?' : 'Neues Spiel',
+        body: resume ? '' : 'Wie viele spielen mit? Der Punktestand beginnt bei 0.',
+        layout: 'list', dismissable: !entry, buttons: [
+          ...(resume ? [{ label: 'Weiterspielen', sub: `Runde ${g.round || 1} · Stand ${g.s.totals[teamOf(viewer)]} : ${g.s.totals[1 - teamOf(viewer)]}`, value: 'resume', primary: true }] : []),
+          { label: resume ? 'Neu zu viert' : 'Zu viert', sub: 'zwei Teams mit Partner', value: 4, primary: !resume && n0 === 4 },
+          { label: resume ? 'Neu zu zweit' : 'Zu zweit', sub: resume ? 'je 15 Karten' : 'je 15 Karten, zwei Canastas zum Ausgehen', value: 2, primary: !resume && n0 === 2 },
+          { label: entry ? 'Zur Sammlung' : 'Abbrechen', value: null, quiet: true }] });
+      if (r === 'resume') { await resumeGame(); return; }
+      if (!r) { if (entry) location.hash = '#/'; return; }
+      const cur = g && g.players && g.players.length === r ? g.players : DEFAULTS[r];
+      const pl = await choosePlayers({ title: r === 4 ? 'Kanaster zu viert' : 'Kanaster zu zweit', min: r, max: r, current: cur,
+        note: r === 4 ? 'Platz 1 & 3 spielen gegen Platz 2 & 4. Freie Plätze übernimmt der Computer.' : 'Zu zweit: Mensch gegen Computer oder zwei Menschen an einem iPhone.' });
+      if (!pl) { if (entry) continue; return; }   // zurück zur Auswahl
+      ui.setOption('players', r);
+      token++; ui.coach.hide();
+      veiled = false; g = null; fresh(false, pl); render(); advance(); welcome();
+      return;
+    }
+  }
+
+  // Hinter dem Startbildschirm den Tisch zeigen – aber keine Karten, wenn mehrere Menschen spielen.
+  if (g && g.s && !multi()) { viewer = humans()[0] ?? 0; render(); }
+  setup(true);
 
   return () => { token++; ro.disconnect(); };
 }

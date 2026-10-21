@@ -1,7 +1,7 @@
 // Service Worker: macht die Spielesammlung offline spielbar.
 // Seiten kommen bevorzugt aus dem Netz (damit Updates ankommen), alles andere aus dem Cache
 // und wird im Hintergrund aufgefrischt.
-const CACHE = 'spiele-v2';
+const CACHE = 'spiele-v3';
 const CORE = [
   './',
   "assets/fonts/jost-400.woff2",

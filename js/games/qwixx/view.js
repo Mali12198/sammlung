@@ -12,11 +12,11 @@ export function mount(ui) {
   let g = load('save:qwixx');
   let token = 0, busy = false, hint = null; // hint: { c, v }
 
-  function fresh(players) {
+  function fresh(players, keep = true) {
     const pl = players || (g && g.s.players) || [{ name: 'Du', human: true }, { name: 'Lotte', human: false }, { name: 'Karl', human: false }];
     g = { s: newGame(pl), counted: false };
     hint = null;
-    persist();
+    if (keep) persist();
   }
   function persist() { save('save:qwixx', g); }
 
@@ -134,7 +134,7 @@ export function mount(ui) {
     if (s.phase === 'done') {
       const st = standings(s);
       txt = `<b>${nameOf(st[0].i)}</b> ${nameOf(st[0].i) === 'Du' ? 'gewinnst' : 'gewinnt'} mit ${st[0].total} Punkten.`;
-      acts.push(h('button', { class: 'btn', onclick: showResult }, 'Ergebnis'), h('button', { class: 'btn btn-primary', onclick: () => startNew(false) }, 'Neues Spiel'));
+      acts.push(h('button', { class: 'btn', onclick: showResult }, 'Ergebnis'), h('button', { class: 'btn btn-primary', onclick: () => startNew(true) }, 'Neues Spiel'));
     } else if (busy || d < 0 || !s.players[d].human) {
       txt = s.phase === 'roll' ? `${nameOf(s.turn)} würfelt …` : `${nameOf(d)} überlegt …`;
     } else {
@@ -272,7 +272,7 @@ export function mount(ui) {
         h('td', {}, `${k + 1}. ${nameOf(x.i)}`), h('td', { class: 'small' }, `${x.rows.join(' + ')} − ${x.pen}`), h('td', { class: 'num' }, String(x.total))))));
     const v = await dialog({ title: 'Endstand', content, buttons: [{ label: 'Blätter ansehen', value: 'sheets' }, { label: 'Neues Spiel', value: 'new', primary: true }], dismissable: true });
     if (v === 'sheets') showSheets();
-    if (v === 'new') startNew(false);
+    if (v === 'new') startNew(true);
   }
 
   async function showSheets() {
@@ -281,16 +281,22 @@ export function mount(ui) {
     await dialog({ title: 'Alle Blätter', content, buttons: [{ label: 'Schließen', value: true, primary: true }], dismissable: true });
   }
 
-  async function startNew(ask = true) {
+  async function startNew(ask = true, entry = false) {
     let players = S().players;
     if (ask) {
-      players = await choosePlayers({ title: 'Qwixx – wer spielt?', min: 2, max: 5, current: S().players, note: 'Menschen und Computer gemischt – das iPhone wird reihum weitergegeben.' });
-      if (!players) return;
+      const running = entry && hadSave && S().phase !== 'done';
+      const r = await choosePlayers({ title: 'Qwixx – wer spielt?', min: 2, max: 5, current: S().players, entry,
+        resume: running ? 'Weiterspielen' : null, resumeSub: running ? `Runde ${S().round}` : '',
+        note: 'Menschen und Computer gemischt – das iPhone wird reihum weitergegeben.' });
+      if (r === 'resume') { advance(); welcome(); return; }
+      if (!r) { if (entry) location.hash = '#/'; return; }
+      players = r;
     }
     token++; ui.coach.hide();
     fresh(players);
     render();
     advance();
+    welcome();
   }
 
   // ---------- Tipp ----------
@@ -331,10 +337,15 @@ export function mount(ui) {
   ui.onNew = () => startNew(true);
   ui.menuExtra = () => h('button', { class: 'btn btn-quiet', style: { marginTop: '6px' }, onclick: showSheets }, 'Alle Blätter ansehen');
 
-  if (!g || !g.s) fresh();
+  function welcome() {
+    if (S().round === 1 && S().phase === 'roll' && S().turn === 0) coachOnce('welcome', { title: 'Willkommen bei Qwixx', text: ['Kreuze in jeder Farbreihe von <b>links nach rechts</b> an – was du überspringst, ist verloren.', 'Je mehr Kreuze in einer Reihe, desto mehr Punkte. Das Spiel endet, wenn zwei Reihen abgeschlossen sind oder jemand vier Fehlwürfe hat.'], ms: 12000 });
+  }
+
+  // Zuerst immer der Startbildschirm: Weiterspielen oder neu (gegen Computer / Menschen).
+  const hadSave = !!(g && g.s);
+  if (!hadSave) fresh(null, false);
   render();
-  advance();
-  if (S().round === 1 && S().phase === 'roll' && S().turn === 0) coachOnce('welcome', { title: 'Willkommen bei Qwixx', text: ['Kreuze in jeder Farbreihe von <b>links nach rechts</b> an – was du überspringst, ist verloren.', 'Je mehr Kreuze in einer Reihe, desto mehr Punkte. Das Spiel endet, wenn zwei Reihen abgeschlossen sind oder jemand vier Fehlwürfe hat.'], ms: 12000 });
+  startNew(true, true);
 
   return () => { token++; };
 }

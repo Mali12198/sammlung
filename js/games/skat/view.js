@@ -104,7 +104,10 @@ export function mount(ui) {
     return tricks ? `${tricks} ${tricks === 1 ? 'Stich' : 'Stiche'}` : (s.declarer >= 0 ? 'Gegenspieler' : pos);
   }
 
+  // Solange der Startbildschirm offen ist und mehrere Menschen spielen, bleiben die Karten verdeckt.
+  let veiled = true;
   function render() {
+    if (!g || !g.s || (veiled && multi())) return;
     const s = g.s;
     const t = s.game ? s.game.type : null;
     for (let sl = 1; sl < N; sl++) {
@@ -639,12 +642,7 @@ export function mount(ui) {
 
   // ---------- Menü ----------
   ui.onTip = tip;
-  ui.onNew = async () => {
-    const pl = await choosePlayers({ title: 'Neue Liste – wer spielt?', min: 3, max: 3, current: players(), note: 'Skat spielt man zu dritt. Freie Plätze übernimmt der Computer. Der Skatblock beginnt neu.' });
-    if (!pl) return;
-    token++; ui.coach.hide(); table.clearBubbles();
-    g = null; fresh(false, pl); render(); advance();
-  };
+  ui.onNew = () => setup(false);
   ui.menuExtra = () => {
     const sw = (key, label, small, on) => {
       const i = h('input', { type: 'checkbox', class: 'switch', onchange: e => { ui.setOption(key, e.target.checked); on && on(); render(); } });
@@ -660,11 +658,35 @@ export function mount(ui) {
   const ro = new ResizeObserver(() => render());
   ro.observe(table.handEl);
 
-  if (!g || !g.s) fresh(false);
-  else setViewer(!multi() && isHuman(actor()) ? actor() : (humans()[0] ?? 0));
-  render();
-  advance();
-  if (!multi()) coachOnce('welcome', { title: 'Willkommen am Skattisch', text: [`Du spielst gegen ${nameOf(seatAt(1))} (links) und ${nameOf(seatAt(2))} (rechts). Erst wird gereizt, dann spielt der Gewinner allein gegen die beiden anderen.`, 'Mit Freunden spielen: Menü → „Neues Spiel“ und Plätze auf „Mensch“ stellen. Die Glühbirne gibt Tipps, das Buch erklärt alle Regeln.'], ms: 11000 });
+  function welcome() {
+    if (!multi()) coachOnce('welcome', { title: 'Willkommen am Skattisch', text: [`Du spielst gegen ${nameOf(seatAt(1))} (links) und ${nameOf(seatAt(2))} (rechts). Erst wird gereizt, dann spielt der Gewinner allein gegen die beiden anderen.`, 'Mit Freunden spielen: Menü → „Neues Spiel“ und Plätze auf „Mensch“ stellen. Die Glühbirne gibt Tipps, das Buch erklärt alle Regeln.'], ms: 11000 });
+  }
+
+  async function setup(entry) {
+    const running = !!(g && g.s);
+    const pl = await choosePlayers({ title: entry ? 'Skat – wer spielt?' : 'Neue Liste – wer spielt?', min: 3, max: 3, current: players(), entry,
+      resume: entry && running ? 'Weiterspielen' : null, resumeSub: entry && running ? `${g.list.length + 1}. Spiel im Skatblock` : '',
+      note: 'Skat spielt man zu dritt. Freie Plätze übernimmt der Computer. Neu starten beginnt einen neuen Skatblock.' });
+    if (pl === 'resume') { await resumeGame(); return; }
+    if (!pl) { if (entry) location.hash = '#/'; return; }
+    token++; ui.coach.hide(); table.clearBubbles();
+    veiled = false; g = null; fresh(false, pl); render(); advance(); welcome();
+  }
+
+  // Weiterspielen: bei mehreren Menschen erst das iPhone übergeben, dann aufdecken.
+  async function resumeGame() {
+    const a = actor();
+    const p = a >= 0 && isHuman(a) ? a : (humans()[0] ?? 0);
+    if (multi()) {
+      await handover(players()[p].name, 'Deine Karten werden gleich aufgedeckt. Die anderen schauen bitte weg.');
+      if (ui.destroyed) return;
+    }
+    veiled = false; setViewer(p); render(); advance(); welcome();
+  }
+
+  // Hinter dem Startbildschirm den Tisch zeigen – aber keine Karten, wenn mehrere Menschen spielen.
+  if (g && g.s && !multi()) { setViewer(humans()[0] ?? 0); render(); }
+  setup(true);
 
   return () => { token++; ro.disconnect(); };
 }

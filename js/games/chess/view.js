@@ -18,9 +18,9 @@ export function mount(ui) {
   let st, sel = null, busy = false, hint = null, flipped = false;
   const ui$ = {};
 
-  function fresh(color, mode = 'cpu', names = null, flip = false) {
+  function fresh(color, mode = 'cpu', names = null, flip = false, keep = true) {
     g = { fens: [START_FEN], sans: [], last: [], player: color, over: null, mode, names: names || { w: 'Weiß', b: 'Schwarz' }, flip };
-    persist();
+    if (keep) persist();
   }
   const two = () => g.mode === 'two';
   const COLOR_DE = { w: 'Weiß', b: 'Schwarz' };
@@ -309,27 +309,37 @@ export function mount(ui) {
     if (r === 'new') newGame();
   }
 
-  async function newGame() {
-    const c = await dialog({
-      title: 'Neue Partie', body: 'Gegen den Computer – mit welcher Farbe? Weiß beginnt. Oder ihr spielt zu zweit an einem iPhone.', layout: 'list',
-      buttons: [{ label: 'Weiß', sub: 'gegen den Computer', value: 'w', primary: true }, { label: 'Schwarz', sub: 'gegen den Computer', value: 'b' }, { label: 'Zufall', sub: 'gegen den Computer', value: 'r' },
-        { label: 'Zu zweit', sub: 'zwei Menschen, ein iPhone', value: 'two' }, { label: 'Abbrechen', value: null, quiet: true }],
-    });
-    if (!c) return;
-    if (c === 'two') {
-      const names = await askNames();
-      if (!names) return;
+  async function newGame(entry = false) {
+    const running = entry && hadSave && !g.over && g.sans.length > 0;
+    for (;;) {
+      const moves = Math.ceil(g.sans.length / 2);
+      const c = await dialog({
+        title: entry ? 'Schach – wie willst du spielen?' : 'Neue Partie',
+        body: running ? '' : 'Gegen den Computer – mit welcher Farbe? Weiß beginnt. Oder ihr spielt zu zweit an einem iPhone.', layout: 'list', dismissable: !entry,
+        buttons: [
+          ...(running ? [{ label: 'Weiterspielen', sub: `${two() ? `${g.names.w} gegen ${g.names.b}` : 'gegen den Computer'} · ${moves}. Zug`, value: 'resume', primary: true }] : []),
+          { label: running ? 'Neu mit Weiß' : 'Weiß', sub: 'gegen den Computer', value: 'w', primary: !running }, { label: running ? 'Neu mit Schwarz' : 'Schwarz', sub: 'gegen den Computer', value: 'b' }, { label: 'Zufällige Farbe', sub: 'gegen den Computer', value: 'r' },
+          { label: 'Zu zweit', sub: 'zwei Menschen, ein iPhone', value: 'two' }, { label: entry ? 'Zur Sammlung' : 'Abbrechen', value: null, quiet: true }],
+      });
+      if (c === 'resume') { computerTurn(); return; }
+      if (!c) { if (entry) location.hash = '#/'; return; }
+      if (c === 'two') {
+        const names = await askNames();
+        if (!names) { if (entry) continue; return; }   // zurück zur Auswahl
+        ui.coach.hide();
+        fresh('w', 'two', { w: names.w, b: names.b }, names.flip);
+        sel = null; hint = null; busy = false;
+        render();
+        return;
+      }
       ui.coach.hide();
-      fresh('w', 'two', { w: names.w, b: names.b }, names.flip);
+      fresh(c === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : c);
       sel = null; hint = null; busy = false;
       render();
+      if (g.player === 'b') computerTurn();
+      else welcome();
       return;
     }
-    ui.coach.hide();
-    fresh(c === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : c);
-    sel = null; hint = null; busy = false;
-    render();
-    if (g.player === 'b') computerTurn();
   }
 
   async function askNames() {
@@ -348,16 +358,22 @@ export function mount(ui) {
   }
 
   ui.onTip = tip;
-  ui.onNew = newGame;
+  ui.onNew = () => newGame(false);
   ui.onUndo = () => undo();
   ui.canUndo = () => g && g.fens.length > 1;
   ui.onLevel = () => render();
 
-  if (!g) { fresh('w'); render(); requestAnimationFrame(sizeBoard); }
-  else { render(); requestAnimationFrame(sizeBoard); if (cur().turn !== g.player && !g.over) computerTurn(); }
-  if (g.sans.length === 0 && ui.coachOn()) {
-    ui.coach.say({ title: 'Los geht’s', text: 'Tippe eine deiner Figuren an, dann das Zielfeld. Über die Glühbirne oben bekommst du jederzeit einen Vorschlag.', ms: 7000 });
+  function welcome() {
+    if (g.sans.length === 0 && ui.coachOn()) {
+      ui.coach.say({ title: 'Los geht’s', text: 'Tippe eine deiner Figuren an, dann das Zielfeld. Über die Glühbirne oben bekommst du jederzeit einen Vorschlag.', ms: 7000 });
+    }
   }
+
+  // Zuerst immer der Startbildschirm: Weiterspielen oder neu (gegen Computer / zu zweit).
+  const hadSave = !!g;
+  if (!g) fresh('w', 'cpu', null, false, false);
+  render(); requestAnimationFrame(sizeBoard);
+  newGame(true);
 
   return () => { ro.disconnect(); };
 }
