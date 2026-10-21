@@ -1,7 +1,8 @@
 // Service Worker: macht die Spielesammlung offline spielbar.
-// Seiten kommen bevorzugt aus dem Netz (damit Updates ankommen), alles andere aus dem Cache
-// und wird im Hintergrund aufgefrischt.
-const CACHE = 'spiele-v3';
+// Jede Version wird beim Installieren komplett und frisch aus dem Netz geladen und danach
+// nur aus genau diesem Cache bedient – so werden nie alte und neue Dateien gemischt.
+// Bei jeder Änderung an der App CACHE hochzählen, sonst kommt das Update nicht an.
+const CACHE = 'spiele-v4';
 const CORE = [
   './',
   "assets/fonts/jost-400.woff2",
@@ -46,7 +47,8 @@ const CORE = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  // cache: 'reload' umgeht den HTTP-Cache des Browsers, damit wirklich die neue Version ankommt
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -57,15 +59,12 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put('./', copy)); return res; })
-      .catch(() => caches.match('./')));
+    // Die Seite gehört zur selben Version wie die Skripte; Updates kommen über einen neuen Service Worker.
+    e.respondWith(caches.open(CACHE).then(c => c.match('./').then(hit => hit || fetch(req))));
     return;
   }
-  e.respondWith(caches.match(req).then(hit => {
-    const net = fetch(req).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
-      return res;
-    }).catch(() => hit);
-    return hit || net;
-  }));
+  e.respondWith(caches.open(CACHE).then(c => c.match(req).then(hit => hit || fetch(req).then(res => {
+    if (res.ok) c.put(req, res.clone());
+    return res;
+  }))));
 });

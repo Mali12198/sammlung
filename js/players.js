@@ -58,16 +58,21 @@ export function choosePlayers({ title = 'Wer spielt mit?', min = 2, max = 2, cou
       body.replaceChildren(...rows);
     };
     render();
+    // Der Weiterspielen-Knopf schließt den Dialog selbst (unabhängig von der dialog()-Version).
+    let finished = false;
+    const resumeBtn = resume ? h('button', {
+      class: 'btn btn-primary resume-btn',
+      onclick: e => { if (finished) return; finished = true; e.currentTarget.closest('.dialog-backdrop')?.remove(); resolve('resume'); },
+    }, h('span', {}, resume), resumeSub ? h('small', {}, resumeSub) : null) : null;
+    const content = h('div', {},
+      resumeBtn ? h('div', { class: 'resume-box' }, resumeBtn, h('p', { class: 'resume-or' }, 'oder neu beginnen:')) : null,
+      body);
     dialog({
-      title, dismissable: !entry,
-      content: close => h('div', {},
-        resume ? h('div', { class: 'resume-box' },
-          h('button', { class: 'btn btn-primary resume-btn', onclick: () => close('resume') }, h('span', {}, resume), resumeSub ? h('small', {}, resumeSub) : null),
-          h('p', { class: 'resume-or' }, 'oder neu beginnen:')) : null,
-        body),
+      title, dismissable: !entry, content,
       buttons: [{ label: entry ? 'Zur Sammlung' : 'Abbrechen', value: null }, { label: resume ? 'Neu starten' : 'Los geht’s', value: 'go', primary: !resume }],
     }).then(v => {
-      if (v === 'resume') return resolve('resume');
+      if (finished) return;
+      finished = true;
       if (v !== 'go') return resolve(null);
       const res = seats.slice(0, n).map((s, i) => ({ human: !!s.human, name: (s.name || '').trim() || (s.human ? `Spieler ${i + 1}` : CPU_NAMES[i % CPU_NAMES.length]) }));
       if (!allowNoHuman && !res.some(p => p.human)) res[0].human = true;

@@ -34,6 +34,7 @@ const RULES = {
 
 const app = document.getElementById('app');
 let cleanup = null;
+let updateReady = false;   // neue Version installiert → beim nächsten Seitenwechsel neu laden
 
 function miniCard(x, y, rot, rank, suit, red) {
   const col = red ? '#b3261e' : '#1b2130';
@@ -160,6 +161,8 @@ async function renderGame(id) {
 }
 
 async function route() {
+  // Nach einem Update komplett neu laden, damit nie alte und neue Dateien gemischt werden.
+  if (updateReady) { location.reload(); return; }
   if (cleanup) { try { cleanup(); } catch (e) { console.error(e); } cleanup = null; }
   document.querySelectorAll('.sheet, .sheet-backdrop, .dialog-backdrop, .handover, .toast').forEach(n => n.remove());
   const id = (location.hash.replace(/^#\/?/, '') || '').split('/')[0];
@@ -179,5 +182,13 @@ window.addEventListener('hashchange', route);
 route();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  let controlled = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!controlled) { controlled = true; return; }   // Erstinstallation: alles ist schon aktuell
+    if (updateReady) return;
+    updateReady = true;
+    // Auf der Startseite sofort neu laden, im Spiel erst beim nächsten Seitenwechsel (Spielstand ist gespeichert).
+    if (!location.hash.replace(/^#\/?/, '')) location.reload();
+  });
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
