@@ -9,8 +9,10 @@ const GAMES = [
   { id: 'kanaster', name: 'Kanaster', tag: 'Melden und Canastas bauen. Zu viert mit Partner oder zu zweit.', color: 'var(--box-canasta)', art: artCanasta },
   { id: 'doppelkopf', name: 'Doppelkopf', tag: 'Re oder Kontra? Zu viert, mit Computern oder Freunden.', color: 'var(--box-doko)', art: artDoko },
   { id: 'skat', name: 'Skat', tag: 'Reizen, drücken, ausspielen. Zu dritt, mit Computern oder Freunden.', color: 'var(--box-skat)', art: artSkat },
-  { id: 'kniffel', name: 'Kniffel', tag: 'Drei Würfe, dreizehn Felder. Allein auf Bestwert oder bis zu sechst.', color: 'var(--box-kniffel)', art: artKniffel },
-  { id: 'qwixx', name: 'Qwixx', tag: 'Kreuzen, was die Würfel hergeben. Zwei bis fünf Spieler.', color: 'var(--box-qwixx)', art: artQwixx },
+  { id: 'wuerfelpoker', name: 'Würfelpoker', tag: 'Drei Würfe, dreizehn Felder. Allein auf Bestwert oder bis zu sechst.', color: 'var(--box-wuerfelpoker)', art: artWuerfelpoker },
+  { id: 'farbreihen', name: 'Farbreihen', tag: 'Kreuzen, was die Würfel hergeben. Zwei bis fünf Spieler.', color: 'var(--box-farbreihen)', art: artFarbreihen },
+  { id: 'romme', name: 'Rommé', tag: 'Sätze und Folgen auslegen, Joker tauschen. Zwei bis vier Spieler.', color: 'var(--box-romme)', art: artRomme },
+  { id: 'zahlensteine', name: 'Zahlensteine', tag: 'Reihen und Gruppen legen, den Tisch umbauen. Zwei bis vier Spieler.', color: 'var(--box-zahlensteine)', art: artZahlensteine },
 ];
 
 const MODULES = {
@@ -19,8 +21,10 @@ const MODULES = {
   kanaster: () => import('./games/canasta/view.js'),
   doppelkopf: () => import('./games/doppelkopf/view.js'),
   skat: () => import('./games/skat/view.js'),
-  kniffel: () => import('./games/kniffel/view.js'),
-  qwixx: () => import('./games/qwixx/view.js'),
+  wuerfelpoker: () => import('./games/wuerfelpoker/view.js'),
+  farbreihen: () => import('./games/farbreihen/view.js'),
+  romme: () => import('./games/romme/view.js'),
+  zahlensteine: () => import('./games/zahlensteine/view.js'),
 };
 const RULES = {
   backgammon: () => import('./games/backgammon/rules.js'),
@@ -28,9 +32,29 @@ const RULES = {
   kanaster: () => import('./games/canasta/rules.js'),
   doppelkopf: () => import('./games/doppelkopf/rules.js'),
   skat: () => import('./games/skat/rules.js'),
-  kniffel: () => import('./games/kniffel/rules.js'),
-  qwixx: () => import('./games/qwixx/rules.js'),
+  wuerfelpoker: () => import('./games/wuerfelpoker/rules.js'),
+  farbreihen: () => import('./games/farbreihen/rules.js'),
+  romme: () => import('./games/romme/rules.js'),
+  zahlensteine: () => import('./games/zahlensteine/rules.js'),
 };
+
+// Umbenennung (keine Markennamen): alte Spielstände, Einstellungen und Statistiken übernehmen
+(function migrateNames() {
+  const MAP = { kniffel: 'wuerfelpoker', qwixx: 'farbreihen', rummikub: 'zahlensteine' };
+  try {
+    for (const k of Object.keys(localStorage)) {
+      for (const [o, n] of Object.entries(MAP)) {
+        const m = k.match(new RegExp(`^(spiele:(?:save:|opt:|stats:)?)${o}(:.*)?$`));
+        if (!m) continue;
+        const nk = m[1] + n + (m[2] || '');
+        let v = localStorage.getItem(k);
+        if (o === 'kniffel' && m[1] === 'spiele:save:') v = v.replace(/"kniffel":/g, '"poker":');
+        if (localStorage.getItem(nk) == null) localStorage.setItem(nk, v);
+        localStorage.removeItem(k);
+      }
+    }
+  } catch { /* Speicher gesperrt – dann eben nicht */ }
+})();
 
 const app = document.getElementById('app');
 let cleanup = null;
@@ -69,10 +93,10 @@ function die(x, y, r, v, fill = '#f7f0e2', pip = '#1b2130') {
   const P = { 1: [[0, 0]], 2: [[-6, -6], [6, 6]], 3: [[-6, -6], [0, 0], [6, 6]], 4: [[-6, -6], [6, -6], [-6, 6], [6, 6]], 5: [[-6, -6], [6, -6], [0, 0], [-6, 6], [6, 6]], 6: [[-6, -7], [6, -7], [-6, 0], [6, 0], [-6, 7], [6, 7]] }[v];
   return `<g transform="translate(${x} ${y}) rotate(${r})"><rect x="-13" y="-13" width="26" height="26" rx="5" fill="${fill}" stroke="rgba(0,0,0,.3)"/>${P.map(([a, b]) => `<circle cx="${a}" cy="${b}" r="2.7" fill="${pip}"/>`).join('')}</g>`;
 }
-function artKniffel() {
+function artWuerfelpoker() {
   return `<svg viewBox="0 0 100 90">${die(22, 58, -14, 6)}${die(44, 40, 8, 6)}${die(66, 60, -6, 6)}${die(84, 34, 16, 6)}${die(50, 72, 20, 6, '#e9cf8a')}</svg>`;
 }
-function artQwixx() {
+function artFarbreihen() {
   const rows = [['#c8322d', 0], ['#e3b31d', 1], ['#2e8b4a', 2], ['#2b5fa8', 3]];
   let o = '';
   for (const [col, k] of rows) {
@@ -85,6 +109,18 @@ function artQwixx() {
     }
   }
   return `<svg viewBox="0 0 100 90">${o}</svg>`;
+}
+function artRomme() {
+  return `<svg viewBox="0 0 100 90">${miniCard(26, 52, -18, '7', 'H', true)}${miniCard(42, 46, -6, '8', 'H', true)}${miniCard(58, 46, 6, '9', 'H', true)}
+  <g transform="translate(75 52) rotate(18)"><rect x="-17" y="-24" width="34" height="48" rx="4" fill="#f7f0e2" stroke="rgba(0,0,0,.25)"/>
+  <svg x="-12" y="-12" width="24" height="24" viewBox="0 0 100 100" fill="#1b2130"><use href="#s-X"/></svg></g></svg>`;
+}
+function artZahlensteine() {
+  const tile = (x, y, r, n, col) => `<g transform="translate(${x} ${y}) rotate(${r})"><rect x="-13" y="-18" width="26" height="36" rx="4" fill="#f4ead2" stroke="rgba(0,0,0,.3)"/>
+    <text x="0" y="5" text-anchor="middle" font-family="Jost, system-ui, sans-serif" font-weight="700" font-size="17" fill="${col}">${n}</text>
+    <circle cx="0" cy="12" r="2.2" fill="${col}" opacity=".5"/></g>`;
+  return `<svg viewBox="0 0 100 90">${tile(20, 34, -6, 5, '#c8322d')}${tile(48, 34, 0, 5, '#1f5fb0')}${tile(76, 34, 6, 5, '#1b2130')}
+  ${tile(30, 70, -3, 11, '#d9902a')}${tile(58, 70, 3, 12, '#d9902a')}${tile(86, 70, 8, 13, '#d9902a')}</svg>`;
 }
 function artChess() {
   return `<svg viewBox="0 0 100 90"><svg x="22" y="0" width="74" height="86" viewBox="0 0 100 100" fill="#f4ecdd"><use href="#p-N"/></svg>
@@ -121,7 +157,7 @@ function renderHome() {
     h('div', { class: 'home-head' },
       h('div', {},
         h('h1', { class: 'home-title' }, 'Spielesammlung'),
-        h('p', { class: 'home-sub' }, 'Sieben Klassiker gegen den Computer oder mit Freunden an einem iPhone. Mit Regelheft und einem Trainer, der dir über die Schulter schaut.')),
+        h('p', { class: 'home-sub' }, 'Neun Klassiker gegen den Computer oder mit Freunden an einem iPhone. Mit Regelheft und einem Trainer, der dir über die Schulter schaut.')),
       iconButton('gear', 'Einstellungen', openSettings)),
     shelf,
     h('p', { class: 'home-foot' }, 'Tipp: Über „Teilen → Zum Home-Bildschirm“ wird die Sammlung zur App auf deinem iPhone.'));

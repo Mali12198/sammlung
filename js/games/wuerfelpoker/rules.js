@@ -1,5 +1,5 @@
 export default {
-  title: 'Kniffel',
+  title: 'Würfelpoker',
   tabs: [
     {
       id: 'regeln', label: 'Regeln', html: `
@@ -25,12 +25,12 @@ export default {
 <tr><td>Full House</td><td>drei gleiche + zwei gleiche</td><td class="num">25</td></tr>
 <tr><td>Kleine Straße</td><td>vier aufeinanderfolgende (z. B. 2-3-4-5)</td><td class="num">30</td></tr>
 <tr><td>Große Straße</td><td>fünf aufeinanderfolgende</td><td class="num">40</td></tr>
-<tr><td>Kniffel</td><td>fünf gleiche</td><td class="num">50</td></tr>
+<tr><td>Poker</td><td>fünf gleiche</td><td class="num">50</td></tr>
 <tr><td>Chance</td><td>beliebig</td><td class="num">alle Augen</td></tr>
 </table>
 
-<h3>Extra-Kniffel (im Menü schaltbar)</h3>
-<p>Würfelst du einen weiteren Kniffel, nachdem dein Kniffel-Feld schon mit 50 belegt ist, gibt es <b>50 Bonuspunkte</b>. Außerdem darf ein weiterer Kniffel als Joker für Full House, kleine oder große Straße mit vollen Punkten eingetragen werden.</p>
+<h3>Extra-Poker (im Menü schaltbar)</h3>
+<p>Würfelst du einen weiteren Poker, nachdem dein Poker-Feld schon mit 50 belegt ist, gibt es <b>50 Bonuspunkte</b>. Außerdem darf ein weiterer Poker als Joker für Full House, kleine oder große Straße mit vollen Punkten eingetragen werden.</p>
 
 <h3>Mehrere Spieler</h3>
 <p>Ihr spielt reihum, jeder hat seine eigene Spalte. Nach 13 Runden gewinnt die höchste Gesamtsumme. Allein spielst du gegen deinen Bestwert.</p>`,
@@ -42,7 +42,7 @@ export default {
 
 <h3>Was halten?</h3>
 <ul>
-<li>Bei zwei oder drei gleichen hoher Augenzahl: halten und auf Pasch, Kniffel oder den oberen Teil spielen.</li>
+<li>Bei zwei oder drei gleichen hoher Augenzahl: halten und auf Pasch, Poker oder den oberen Teil spielen.</li>
 <li>Vier aufeinanderfolgende (z. B. 2-3-4-5): sofort kleine Straße sicher, mit zwei Würfen hast du gute Chancen auf die große (an beiden Enden passt es – 1 oder 6).</li>
 <li>Eine Lücke in der Straße (z. B. 1-2-4-5) ist viel schlechter: Nur eine Zahl passt.</li>
 <li>Zwei Paare: Ein Wurf mit einem Würfel bringt mit 1 zu 3 ein Full House.</li>
@@ -51,15 +51,15 @@ export default {
 <h3>Chancen in Zahlen</h3>
 <table>
 <tr><th>Situation (2 Würfe übrig)</th><th class="num">Chance</th></tr>
-<tr><td>Kniffel mit drei gleichen</td><td class="num">ca. 9 %</td></tr>
-<tr><td>Kniffel mit vier gleichen</td><td class="num">ca. 31 %</td></tr>
+<tr><td>Poker mit drei gleichen</td><td class="num">ca. 9 %</td></tr>
+<tr><td>Poker mit vier gleichen</td><td class="num">ca. 31 %</td></tr>
 <tr><td>Große Straße aus offener Viererreihe</td><td class="num">ca. 56 %</td></tr>
 <tr><td>Full House aus zwei Paaren</td><td class="num">ca. 56 %</td></tr>
 </table>
 
 <h3>Klug streichen</h3>
 <ul>
-<li>Musst du eine 0 eintragen, nimm ein Feld, das wenig bringt: <b>Einer</b> (im Schnitt ~2 Punkte) oder einen hoffnungslosen <b>Kniffel</b> spät im Spiel.</li>
+<li>Musst du eine 0 eintragen, nimm ein Feld, das wenig bringt: <b>Einer</b> (im Schnitt ~2 Punkte) oder einen hoffnungslosen <b>Poker</b> spät im Spiel.</li>
 <li>Die <b>Chance</b> ist dein Rettungsring – nutze sie nicht zu früh für kleine Summen.</li>
 <li>Im Dreier- und Viererpasch zählen alle Augen: Mit hohen Zahlen lohnt sich das mehr.</li>
 </ul>`,

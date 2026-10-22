@@ -1,4 +1,4 @@
-import { newGame, roll, markWhite, markColor, aiWhite, aiColor, aiReroll, reroll, canReroll, score, canMark, COLORS, ROW, lastIdx, standings, POINTS, maxPen } from '../js/games/qwixx/engine.js';
+import { newGame, roll, markWhite, markColor, aiWhite, aiColor, aiReroll, reroll, canReroll, score, canMark, COLORS, ROW, lastIdx, standings, POINTS, maxPen } from '../js/games/farbreihen/engine.js';
 import { seeded } from '../js/util.js';
 
 export function playGame(levels, rnd, opts = {}) {

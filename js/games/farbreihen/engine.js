@@ -1,4 +1,4 @@
-// Qwixx: vier Farbreihen ankreuzen. Rot/Gelb von 2 bis 12, Grün/Blau von 12 bis 2.
+// Farbreihen: vier Farbreihen ankreuzen. Rot/Gelb von 2 bis 12, Grün/Blau von 12 bis 2.
 export const COLORS = ['r', 'y', 'g', 'b'];
 export const COLOR_NAME = { r: 'Rot', y: 'Gelb', g: 'Grün', b: 'Blau' };
 export const ROW = {

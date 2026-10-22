@@ -1,7 +1,7 @@
 const dot = c => `<span class="qx-dot qx-${c}"></span>`;
 
 export default {
-  title: 'Qwixx',
+  title: 'Farbreihen',
   tabs: [
     {
       id: 'regeln', label: 'Regeln', html: `

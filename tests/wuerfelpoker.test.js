@@ -1,4 +1,4 @@
-import { newGame, roll, enter, aiStep, holdsFor, totals, scoreFor, CATS, plan } from '../js/games/kniffel/engine.js';
+import { newGame, roll, enter, aiStep, holdsFor, totals, scoreFor, CATS, plan } from '../js/games/wuerfelpoker/engine.js';
 import { seeded } from '../js/util.js';
 
 export function playGame(levels, rnd) {
@@ -20,12 +20,12 @@ export default function (t) {
     t.eq(scoreFor('three', [3, 3, 3, 2, 6]), 17);
     t.eq(scoreFor('four', [3, 3, 3, 2, 6]), 0);
     t.eq(scoreFor('full', [2, 2, 5, 5, 5]), 25);
-    t.eq(scoreFor('full', [5, 5, 5, 5, 5]), 0, 'Kniffel ist ohne Joker kein Full House');
+    t.eq(scoreFor('full', [5, 5, 5, 5, 5]), 0, 'Poker ist ohne Joker kein Full House');
     t.eq(scoreFor('full', [5, 5, 5, 5, 5], true), 25, 'mit Joker schon');
     t.eq(scoreFor('small', [1, 3, 4, 2, 6]), 30);
     t.eq(scoreFor('small', [1, 3, 5, 2, 6]), 0);
     t.eq(scoreFor('large', [6, 3, 4, 2, 5]), 40);
-    t.eq(scoreFor('kniffel', [4, 4, 4, 4, 4]), 50);
+    t.eq(scoreFor('poker', [4, 4, 4, 4, 4]), 50);
     t.eq(scoreFor('fives', [5, 1, 5, 2, 5]), 15);
   });
   t('Bonus ab 63 oben', () => {

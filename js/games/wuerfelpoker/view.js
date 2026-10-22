@@ -1,17 +1,17 @@
-// Kniffel – Oberfläche
+// Würfelpoker – Oberfläche
 import { h, dialog, toast, sleep } from '../../ui.js';
 import { load, save, addResult, delay } from '../../store.js';
 import { choosePlayers } from '../../players.js';
 import {
   newGame, roll, enter, options, totals, hasRolled, plan, holdsFor, aiStep, explainKeep, jokerActive,
-  CATS, UPPER, CAT_NAME, CAT_HINT, BASE, FACE, isKniffel, bonusReachable,
+  CATS, UPPER, CAT_NAME, CAT_HINT, BASE, FACE, isPoker, bonusReachable,
 } from './engine.js';
 
 const PIPS = { 1: [[50, 50]], 2: [[28, 28], [72, 72]], 3: [[28, 28], [50, 50], [72, 72]], 4: [[28, 28], [72, 28], [28, 72], [72, 72]], 5: [[28, 28], [72, 28], [50, 50], [28, 72], [72, 72]], 6: [[28, 26], [72, 26], [28, 50], [72, 50], [28, 74], [72, 74]] };
 export const dieSvg = v => `<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="20" class="die-face"/>${(PIPS[v] || []).map(([x, y]) => `<circle cx="${x}" cy="${y}" r="9.5" class="die-pip"/>`).join('')}</svg>`;
 
 export function mount(ui) {
-  let g = load('save:kniffel');
+  let g = load('save:wuerfelpoker');
   let token = 0, busy = false, hint = null; // hint: { holds:[bool], cat }
 
   function fresh(players, keep = true) {
@@ -20,10 +20,10 @@ export function mount(ui) {
     hint = null;
     if (keep) persist();
   }
-  function persist() { save('save:kniffel', g); }
+  function persist() { save('save:wuerfelpoker', g); }
 
   // ---------- Aufbau ----------
-  const wrap = h('div', { class: 'dice-game kniffel' });
+  const wrap = h('div', { class: 'dice-game wuerfelpoker' });
   const top = h('div', { class: 'dg-top' });
   const chips = h('div', { class: 'dg-chips' });
   const sheetBox = h('div', { class: 'kn-sheet-box' });
@@ -45,7 +45,7 @@ export function mount(ui) {
     const s = S();
     top.replaceChildren(...[
       h('span', { class: 'trump-pill static' }, s.phase === 'done' ? 'Spiel beendet' : `Runde ${Math.min(s.round, 13)} von 13`),
-      s.players.length === 1 ? h('span', { class: 'trump-pill static' }, `Bestwert: ${load('kniffel:best', 0) || '–'}`) : null].filter(Boolean));
+      s.players.length === 1 ? h('span', { class: 'trump-pill static' }, `Bestwert: ${load('wuerfelpoker:best', 0) || '–'}`) : null].filter(Boolean));
     chips.replaceChildren(...s.players.map((p, i) => h('div', { class: 'dg-chip' + (i === s.turn && s.phase !== 'done' ? ' on' : '') + (p.human ? ' human' : '') },
       h('span', { class: 'turn-dot' }), h('b', {}, youName(i)), h('span', { class: 'pts' }, String(totals(s, i).total)))));
     renderSheet();
@@ -85,7 +85,7 @@ export function mount(ui) {
     table.append(sumRow('Summe oben', i => totals(s, i).upper));
     table.append(sumRow('Bonus (ab 63)', i => { const t = totals(s, i); return t.bonus ? '+35' : (bonusReachable(s.sheets[i]) ? '' : '–'); }, 'bonus'));
     for (const c of CATS.slice(6)) table.append(row(c));
-    if (s.opts.joker) table.append(sumRow('Extra-Kniffel', i => (s.extra[i] ? '+' + s.extra[i] * 50 : '')));
+    if (s.opts.joker) table.append(sumRow('Extra-Poker', i => (s.extra[i] ? '+' + s.extra[i] * 50 : '')));
     table.append(sumRow('Gesamt', i => totals(s, i).total, 'total'));
     sheetBox.replaceChildren(table);
   }
@@ -160,7 +160,7 @@ export function mount(ui) {
     roll(s);
     busy = false;
     persist(); render();
-    if (isKniffel(s.dice)) toast(s.sheets[s.turn].kniffel === 50 && s.opts.joker ? 'Noch ein Kniffel! +50 Bonus' : 'KNIFFEL!', 2600);
+    if (isPoker(s.dice)) toast(s.sheets[s.turn].poker === 50 && s.opts.joker ? 'Noch ein Poker! +50 Bonus' : 'POKER!', 2600);
     coachOnce('hold', { title: 'Würfel halten', text: 'Tippe die Würfel an, die du behalten willst – sie rutschen hoch. Dann wirf den Rest neu. Du hast drei Würfe pro Runde.', ms: 7000 });
   }
 
@@ -236,7 +236,7 @@ export function mount(ui) {
       const p = s.turn;
       const v = enter(s, st.cat);
       persist();
-      if (v === 50 && st.cat === 'kniffel') toast(`${s.players[p].name} würfelt einen Kniffel!`);
+      if (v === 50 && st.cat === 'poker') toast(`${s.players[p].name} würfelt einen Poker!`);
       render();
       if (s.phase === 'done') { busy = false; return finish(); }
     }
@@ -252,8 +252,8 @@ export function mount(ui) {
       const humans = s.players.map((p, i) => (p.human ? i : -1)).filter(i => i >= 0);
       if (humans.length === 1) {
         const me = humans[0];
-        addResult('kniffel', s.players.length === 1 ? true : tot[me] === Math.max(...tot));
-        if (tot[me] > load('kniffel:best', 0)) { save('kniffel:best', tot[me]); toast(`Neuer Bestwert: ${tot[me]}!`, 3000); }
+        addResult('wuerfelpoker', s.players.length === 1 ? true : tot[me] === Math.max(...tot));
+        if (tot[me] > load('wuerfelpoker:best', 0)) { save('wuerfelpoker:best', tot[me]); toast(`Neuer Bestwert: ${tot[me]}!`, 3000); }
       }
       persist();
     }
@@ -276,7 +276,7 @@ export function mount(ui) {
     let players = S().players;
     if (ask) {
       const running = entry && hadSave && S().phase !== 'done';
-      const r = await choosePlayers({ title: 'Kniffel – wer spielt?', min: 1, max: 6, current: S().players, entry,
+      const r = await choosePlayers({ title: 'Würfelpoker – wer spielt?', min: 1, max: 6, current: S().players, entry,
         resume: running ? 'Weiterspielen' : null, resumeSub: running ? `Runde ${S().round} von 13` : '',
         note: 'Allein spielst du auf Bestwert. Gemischt geht auch: Menschen und Computer am selben iPhone.' });
       if (r === 'resume') { advance(); welcome(); return; }
@@ -309,7 +309,7 @@ export function mount(ui) {
     const sc = options(s).find(o => o.cat === pl.cat).score;
     const text = [sc === 0 ? `Streiche ${CAT_NAME[pl.cat]}. ${whyCat(pl.cat, s.turn)}` : `Trage ${sc} bei ${CAT_NAME[pl.cat]} ein. ${whyCat(pl.cat, s.turn)}`];
     if (s.rollsLeft > 0) text.push('Weiterwürfeln lohnt sich hier nicht – das Ergebnis ist schon gut.');
-    if (jokerActive(s)) text.push('Joker: Dieser zweite Kniffel zählt auch als Full House oder Straße.');
+    if (jokerActive(s)) text.push('Joker: Dieser zweite Poker zählt auch als Full House oder Straße.');
     ui.coach.say({ title: sc === 0 ? 'Feld streichen' : 'Eintragen', text, actions: [{ label: 'Eintragen', primary: true, onClick: () => onEnter(pl.cat) }] });
   }
 
@@ -320,12 +320,12 @@ export function mount(ui) {
     const i = h('input', { type: 'checkbox', class: 'switch', onchange: e => ui.setOption('joker', e.target.checked) });
     i.checked = !!ui.option('joker', true);
     return h('div', {},
-      h('label', { class: 'switch-row' }, h('span', {}, 'Extra-Kniffel', h('small', {}, 'Jeder weitere Kniffel: +50 und Joker für Full House und Straßen (ab dem nächsten Spiel)')), i),
-      h('button', { class: 'btn btn-quiet', style: { marginTop: '8px' }, onclick: () => { save('kniffel:best', 0); toast('Bestwert gelöscht'); render(); } }, 'Bestwert zurücksetzen'));
+      h('label', { class: 'switch-row' }, h('span', {}, 'Extra-Poker', h('small', {}, 'Jeder weitere Poker: +50 und Joker für Full House und Straßen (ab dem nächsten Spiel)')), i),
+      h('button', { class: 'btn btn-quiet', style: { marginTop: '8px' }, onclick: () => { save('wuerfelpoker:best', 0); toast('Bestwert gelöscht'); render(); } }, 'Bestwert zurücksetzen'));
   };
 
   function welcome() {
-    if (!hasRolled(S()) && S().round === 1 && S().turn === 0) coachOnce('welcome', { title: 'Willkommen beim Kniffel', text: ['Pro Runde hast du drei Würfe. Danach trägst du das Ergebnis in ein freies Feld des Blocks ein – jedes Feld nur einmal.', 'Ziel: möglichst viele Punkte nach 13 Runden. Die Glühbirne sagt dir, was du halten solltest.'], ms: 11000 });
+    if (!hasRolled(S()) && S().round === 1 && S().turn === 0) coachOnce('welcome', { title: 'Willkommen beim Würfelpoker', text: ['Pro Runde hast du drei Würfe. Danach trägst du das Ergebnis in ein freies Feld des Blocks ein – jedes Feld nur einmal.', 'Ziel: möglichst viele Punkte nach 13 Runden. Die Glühbirne sagt dir, was du halten solltest.'], ms: 11000 });
   }
 
   // Zuerst immer der Startbildschirm: Weiterspielen oder neu (gegen Computer / Menschen).
@@ -336,7 +336,7 @@ export function mount(ui) {
 
   function coachOnce(key, msg) {
     if (!ui.coachOn()) return;
-    const k = 'kniffel:tip:' + key;
+    const k = 'wuerfelpoker:tip:' + key;
     if (load(k, false)) return;
     save(k, true);
     ui.coach.say(msg);

@@ -2,7 +2,7 @@
 // Jede Version wird beim Installieren komplett und frisch aus dem Netz geladen und danach
 // nur aus genau diesem Cache bedient – so werden nie alte und neue Dateien gemischt.
 // Bei jeder Änderung an der App CACHE hochzählen, sonst kommt das Update nicht an.
-const CACHE = 'spiele-v7';
+const CACHE = 'spiele-v8';
 const CORE = [
   './',
   "assets/fonts/jost-400.woff2",
@@ -28,15 +28,21 @@ const CORE = [
   "js/games/doppelkopf/engine.js",
   "js/games/doppelkopf/rules.js",
   "js/games/doppelkopf/view.js",
-  "js/games/kniffel/engine.js",
-  "js/games/kniffel/rules.js",
-  "js/games/kniffel/view.js",
-  "js/games/qwixx/engine.js",
-  "js/games/qwixx/rules.js",
-  "js/games/qwixx/view.js",
+  "js/games/farbreihen/engine.js",
+  "js/games/farbreihen/rules.js",
+  "js/games/farbreihen/view.js",
+  "js/games/romme/engine.js",
+  "js/games/romme/rules.js",
+  "js/games/romme/view.js",
   "js/games/skat/engine.js",
   "js/games/skat/rules.js",
   "js/games/skat/view.js",
+  "js/games/wuerfelpoker/engine.js",
+  "js/games/wuerfelpoker/rules.js",
+  "js/games/wuerfelpoker/view.js",
+  "js/games/zahlensteine/engine.js",
+  "js/games/zahlensteine/rules.js",
+  "js/games/zahlensteine/view.js",
   "js/main.js",
   "js/players.js",
   "js/shell.js",

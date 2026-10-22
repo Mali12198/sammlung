@@ -1,19 +1,21 @@
 # Spielesammlung
 
-Sieben Klassiker gegen den Computer oder mit Freunden an einem Gerät – als Web-App fürs iPhone:
+Neun Spiele gegen den Computer oder mit Freunden an einem Gerät – als Web-App fürs iPhone:
 
 | Spiel | Mitspieler | Besonderheiten |
 |---|---|---|
 | **Backgammon** | Computer oder zu zweit | Doppelwürfel, Gammon/Backgammon, Gewinnchance vor dem Wurf |
 | **Schach** | Computer oder zu zweit | Alle Regeln (Rochade, en passant, Umwandlung, Remisregeln), deutsche Notation |
 | **Kanaster** | zu viert (Teams) oder zu zweit, Menschen und Computer gemischt | Erstmeldung, eingefrorene Ablage, rote/schwarze Dreien, Canastas, Spiel bis 5000 |
-| **Doppelkopf** | 1–4 Menschen, Rest Computer | DDV-Regeln mit Neunen, Hochzeit, alle Soli, Ansagen bis „schwarz“, Fuchs/Doppelkopf/Karlchen, Hausregel „zweite Dulle“ |
-| **Skat** | 1–3 Menschen, Rest Computer | Reizen, Hand, Drücken, Farb-/Grand-/Nullspiele (auch ouvert), Spitzen, Schneider/Schwarz, Überreizen, Skatblock |
-| **Kniffel** | 0–5 Computer | Drei Würfe, Würfel halten, Kniffelblock mit Bonus, Extra-Kniffel/Joker (schaltbar), Bestwert im Solospiel |
-| **Qwixx** | 1–4 Computer | Vier Farbreihen, weiße Summe für alle, Farbkombination für den Aktiven, Fehlwürfe, Reihen abschließen; Hausregeln: kurzes Spiel, Neuwurf-Joker, früh abschließen |
+| **Doppelkopf** | 1–4 Menschen, Rest Computer | DDV-Regeln mit Neunen, Hochzeit, alle Soli, Ansagen bis „schwarz“, Fuchs/Doppelkopf/Karlchen; Hausregeln: zweite Dulle, Schweinchen, Armut, Bockrunden |
+| **Skat** | 1–3 Menschen, Rest Computer | Reizen, Hand, Drücken, Farb-/Grand-/Nullspiele (auch ouvert), Spitzen, Schneider/Schwarz, Überreizen, Skatblock; Hausregeln: Ramsch, Kontra/Re, Bockrunden |
+| **Würfelpoker** | 0–5 Computer | Drei Würfe, Würfel halten, Spielblock mit Bonus, Extra-Poker/Joker (schaltbar), Bestwert im Solospiel |
+| **Farbreihen** | 1–4 Computer | Vier Farbreihen, weiße Summe für alle, Farbkombination für den Aktiven, Fehlwürfe, Reihen abschließen; Hausregeln: kurzes Spiel, Neuwurf-Joker, früh abschließen |
+| **Rommé** | 2–4 Spieler, Menschen und Computer gemischt | Sätze und Folgen, Rauskommen mit 40, Anlegen, Joker tauschen, Hand-Rommé, Spiel bis 200/500 |
+| **Zahlensteine** | 2–4 Spieler, Menschen und Computer gemischt | Gruppen und Reihen, erstes Auslegen mit 30, Tisch umbauen (die App findet die Aufteilung selbst) |
 
 Jedes Spiel hat drei Spielstärken (leicht, mittel, schwer). Bei „schwer“ rechnen die Kartenspiele
-vor jeder Karte viele mögliche Verteilungen durch; beim Kniffel prüft der Computer alle Halte-Möglichkeiten
+vor jeder Karte viele mögliche Verteilungen durch; beim Würfelpoker prüft der Computer alle Halte-Möglichkeiten
 über die verbleibenden Würfe.
 
 ## Mit Freunden spielen
@@ -50,6 +52,7 @@ Reines HTML, CSS und JavaScript (ES-Module) ohne Build-Schritt.
 
 ```bash
 python3 -m http.server 8000   # dann http://localhost:8000 öffnen
+# Nach jeder Änderung CACHE in sw.js hochzählen, damit das Update auf dem iPhone ankommt.
 npm test                      # Regel- und KI-Tests (Node 18+)
 ```
 

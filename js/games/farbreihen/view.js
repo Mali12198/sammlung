@@ -1,8 +1,8 @@
-// Qwixx – Oberfläche
+// Farbreihen – Oberfläche
 import { h, dialog, toast, sleep } from '../../ui.js';
 import { load, save, addResult, delay } from '../../store.js';
 import { choosePlayers } from '../../players.js';
-import { dieSvg } from '../kniffel/view.js';
+import { dieSvg } from '../wuerfelpoker/view.js';
 import {
   newGame, roll, markWhite, markColor, whiteOptions, colorOptions, whiteSum, aiWhite, aiColor, score, standings, describe,
   markValue, lastIdx, markCount, COLORS, COLOR_NAME, ROW, maxPen, rowsToEnd,
@@ -17,7 +17,7 @@ const RULE_INFO = {
 };
 
 export function mount(ui) {
-  let g = load('save:qwixx');
+  let g = load('save:farbreihen');
   let token = 0, busy = false, hint = null; // hint: { c, v }
 
   function fresh(players, keep = true, rules = null) {
@@ -26,9 +26,9 @@ export function mount(ui) {
     hint = null;
     if (keep) persist();
   }
-  function persist() { save('save:qwixx', g); }
+  function persist() { save('save:farbreihen', g); }
 
-  const wrap = h('div', { class: 'dice-game qwixx' });
+  const wrap = h('div', { class: 'dice-game farbreihen' });
   const top = h('div', { class: 'dg-top' });
   const chips = h('div', { class: 'dg-chips' });
   const sheetBox = h('div', { class: 'qx-sheet-box' });
@@ -286,7 +286,7 @@ export function mount(ui) {
       const hs = humans();
       if (hs.length === 1) {
         const st = standings(s);
-        addResult('qwixx', st[0].i === hs[0] || st[0].total === score(s.sheets[hs[0]]).total);
+        addResult('farbreihen', st[0].i === hs[0] || st[0].total === score(s.sheets[hs[0]]).total);
       }
       persist();
     }
@@ -330,7 +330,7 @@ export function mount(ui) {
     if (ask) {
       const running = entry && hadSave && S().phase !== 'done';
       const form = rulesForm();
-      const r = await choosePlayers({ title: 'Qwixx – wer spielt?', min: 2, max: 5, current: S().players, entry,
+      const r = await choosePlayers({ title: 'Farbreihen – wer spielt?', min: 2, max: 5, current: S().players, entry,
         resume: running ? 'Weiterspielen' : null, resumeSub: running ? `Runde ${S().round}${activeRules().length ? ' · ' + activeRules().map(k => RULE_INFO[k].short).join(' · ') : ''}` : '',
         note: 'Menschen und Computer gemischt – das iPhone wird reihum weitergegeben.', extra: form.el });
       if (r === 'resume') { advance(); welcome(); return; }
@@ -386,7 +386,7 @@ export function mount(ui) {
 
   function coachOnce(key, msg) {
     if (!ui.coachOn()) return;
-    const k = 'qwixx:tip:' + key;
+    const k = 'farbreihen:tip:' + key;
     if (load(k, false)) return;
     save(k, true);
     ui.coach.say(msg);
@@ -397,7 +397,7 @@ export function mount(ui) {
   ui.menuExtra = () => h('button', { class: 'btn btn-quiet', style: { marginTop: '6px' }, onclick: showSheets }, 'Alle Blätter ansehen');
 
   function welcome() {
-    if (S().round === 1 && S().phase === 'roll' && S().turn === 0) coachOnce('welcome', { title: 'Willkommen bei Qwixx', text: ['Kreuze in jeder Farbreihe von <b>links nach rechts</b> an – was du überspringst, ist verloren.', `Je mehr Kreuze in einer Reihe, desto mehr Punkte. Das Spiel endet, wenn ${rowsToEnd(S()) === 1 ? 'eine Reihe' : 'zwei Reihen'} abgeschlossen ${rowsToEnd(S()) === 1 ? 'ist' : 'sind'} oder jemand ${maxPen(S()) === 3 ? 'drei' : 'vier'} Fehlwürfe hat.`], ms: 12000 });
+    if (S().round === 1 && S().phase === 'roll' && S().turn === 0) coachOnce('welcome', { title: 'Willkommen bei Farbreihen', text: ['Kreuze in jeder Farbreihe von <b>links nach rechts</b> an – was du überspringst, ist verloren.', `Je mehr Kreuze in einer Reihe, desto mehr Punkte. Das Spiel endet, wenn ${rowsToEnd(S()) === 1 ? 'eine Reihe' : 'zwei Reihen'} abgeschlossen ${rowsToEnd(S()) === 1 ? 'ist' : 'sind'} oder jemand ${maxPen(S()) === 3 ? 'drei' : 'vier'} Fehlwürfe hat.`], ms: 12000 });
   }
 
   // Zuerst immer der Startbildschirm: Weiterspielen oder neu (gegen Computer / Menschen).

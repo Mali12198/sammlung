@@ -1,19 +1,19 @@
-// Kniffel: Regeln, Wertung und Computer (Erwartungswert über die verbleibenden Würfe).
-export const CATS = ['ones', 'twos', 'threes', 'fours', 'fives', 'sixes', 'three', 'four', 'full', 'small', 'large', 'kniffel', 'chance'];
+// Würfelpoker: Regeln, Wertung und Computer (Erwartungswert über die verbleibenden Würfe).
+export const CATS = ['ones', 'twos', 'threes', 'fours', 'fives', 'sixes', 'three', 'four', 'full', 'small', 'large', 'poker', 'chance'];
 export const UPPER = CATS.slice(0, 6);
 export const LOWER = CATS.slice(6);
 export const CAT_NAME = {
   ones: 'Einer', twos: 'Zweier', threes: 'Dreier', fours: 'Vierer', fives: 'Fünfer', sixes: 'Sechser',
-  three: 'Dreierpasch', four: 'Viererpasch', full: 'Full House', small: 'Kleine Straße', large: 'Große Straße', kniffel: 'Kniffel', chance: 'Chance',
+  three: 'Dreierpasch', four: 'Viererpasch', full: 'Full House', small: 'Kleine Straße', large: 'Große Straße', poker: 'Poker', chance: 'Chance',
 };
 export const CAT_HINT = {
   ones: 'Summe aller Einser', twos: 'Summe aller Zweier', threes: 'Summe aller Dreier', fours: 'Summe aller Vierer', fives: 'Summe aller Fünfer', sixes: 'Summe aller Sechser',
   three: 'Drei gleiche – alle Augen zählen', four: 'Vier gleiche – alle Augen zählen', full: 'Drei + zwei gleiche: 25',
-  small: 'Vier in Folge: 30', large: 'Fünf in Folge: 40', kniffel: 'Fünf gleiche: 50', chance: 'Alle Augen zählen',
+  small: 'Vier in Folge: 30', large: 'Fünf in Folge: 40', poker: 'Fünf gleiche: 50', chance: 'Alle Augen zählen',
 };
 export const FACE = { ones: 1, twos: 2, threes: 3, fours: 4, fives: 5, sixes: 6 };
 // Durchschnittswerte bei guter Spielweise – „was ein Feld später noch wert wäre“
-export const BASE = { ones: 1.9, twos: 5.3, threes: 8.6, fours: 12.2, fives: 15.7, sixes: 19.2, three: 21.7, four: 13.1, full: 22.6, small: 29.5, large: 32.7, kniffel: 16.9, chance: 22.0 };
+export const BASE = { ones: 1.9, twos: 5.3, threes: 8.6, fours: 12.2, fives: 15.7, sixes: 19.2, three: 21.7, four: 13.1, full: 22.6, small: 29.5, large: 32.7, poker: 16.9, chance: 22.0 };
 
 export function countsOf(dice) {
   const c = [0, 0, 0, 0, 0, 0, 0];
@@ -34,13 +34,13 @@ export function scoreC(cat, c, joker = false) {
     case 'full': return joker || (mx === 3 && c.some((x, i) => i && x === 2)) ? 25 : 0;
     case 'small': return joker || hasRun(c, 1, 4) || hasRun(c, 2, 4) || hasRun(c, 3, 4) ? 30 : 0;
     case 'large': return joker || hasRun(c, 1, 5) || hasRun(c, 2, 5) ? 40 : 0;
-    case 'kniffel': return mx === 5 ? 50 : 0;
+    case 'poker': return mx === 5 ? 50 : 0;
     case 'chance': return sumC(c);
   }
   return 0;
 }
 export const scoreFor = (cat, dice, joker) => scoreC(cat, countsOf(dice), joker);
-export const isKniffel = dice => dice.length === 5 && dice.every(d => d === dice[0]);
+export const isPoker = dice => dice.length === 5 && dice.every(d => d === dice[0]);
 
 // ---------------------------------------------------------------
 // Spiel
@@ -49,7 +49,7 @@ export function newGame(players, opts = {}) {
   return {
     players: players.map(p => ({ ...p })),
     sheets: players.map(() => Object.fromEntries(CATS.map(c => [c, null]))),
-    extra: players.map(() => 0),     // weitere Kniffel (je 50 Bonus)
+    extra: players.map(() => 0),     // weitere Poker (je 50 Bonus)
     turn: 0, round: 1,
     dice: [1, 2, 3, 4, 5], held: [false, false, false, false, false], rollsLeft: 3,
     phase: 'roll', opts: { joker: opts.joker !== false }, log: [],
@@ -67,7 +67,7 @@ export function roll(s, rnd = Math.random) {
 export const hasRolled = s => s.rollsLeft < 3;
 
 export function jokerActive(s, p = s.turn) {
-  return s.opts.joker && isKniffel(s.dice) && s.sheets[p].kniffel !== null;
+  return s.opts.joker && isPoker(s.dice) && s.sheets[p].poker !== null;
 }
 
 export function options(s, p = s.turn) {
@@ -81,7 +81,7 @@ export function enter(s, cat) {
   if (!hasRolled(s)) throw new Error('erst würfeln');
   if (s.sheets[p][cat] !== null) throw new Error('Feld schon belegt');
   const joker = jokerActive(s, p);
-  if (s.opts.joker && isKniffel(s.dice) && s.sheets[p].kniffel === 50) s.extra[p]++;
+  if (s.opts.joker && isPoker(s.dice) && s.sheets[p].poker === 50) s.extra[p]++;
   const v = scoreC(cat, countsOf(s.dice), joker);
   s.sheets[p][cat] = v;
   s.log.push({ p, cat, v, dice: s.dice.slice() });
@@ -153,12 +153,12 @@ export function makeValuer(s, p, level = 'mittel') {
   const upperHave = UPPER.reduce((a, c) => a + (sh[c] || 0), 0);
   const reach = upperHave < 63 && bonusReachable(sh);
   const bw = level === 'leicht' ? 0.05 : level === 'mittel' ? 0.25 : 0.6;
-  const kniffel50 = sh.kniffel === 50 && s.opts.joker;
-  const kniffelFilled = sh.kniffel !== null && s.opts.joker;
+  const poker50 = sh.poker === 50 && s.opts.joker;
+  const pokerFilled = sh.poker !== null && s.opts.joker;
   const turnsLeft = open.length;
   return function value(c) {
     const isK = maxC(c) === 5;
-    const joker = isK && kniffelFilled;
+    const joker = isK && pokerFilled;
     let best = -Infinity, bestCat = null;
     for (const cat of open) {
       const sc = scoreC(cat, c, joker);
@@ -168,10 +168,10 @@ export function makeValuer(s, p, level = 'mittel') {
         v += (sc - 3 * f) * bw;
         if (upperHave + sc >= 63) v += level === 'schwer' ? 22 : level === 'mittel' ? 8 : 0;
       }
-      if (cat === 'kniffel' && sc === 50) v += 8;
+      if (cat === 'poker' && sc === 50) v += 8;
       if (v > best) { best = v; bestCat = cat; }
     }
-    if (isK && kniffel50) best += 50;
+    if (isK && poker50) best += 50;
     return { v: best, cat: bestCat };
   };
 }
@@ -257,7 +257,7 @@ export function explainKeep(dice, keep, s) {
     if (sh[UPPER[face - 1]] === null) goals.push(CAT_NAME[UPPER[face - 1]]);
     if (sh.three === null && mx < 3) goals.push('Dreierpasch');
     if (sh.four === null) goals.push('Viererpasch');
-    if (sh.kniffel === null || sh.kniffel === 50) goals.push('Kniffel');
+    if (sh.poker === null || sh.poker === 50) goals.push('Poker');
     return `Sammle ${face}er: Mit ${mx} gleichen bist du auf dem Weg zu ${goals.slice(0, 3).join(', ') || 'einem Pasch'}.`;
   }
   if (distinct === n && n >= 3) {
