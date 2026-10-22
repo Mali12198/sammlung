@@ -94,7 +94,7 @@ export function cardTable(ui, { names, positions }) {
     },
     // cards: Array; opts: { playable(i)->bool, selected:Set<i>, hint:Set<i>, onTap(i), trump(c)->bool, dimAll }
     renderHand(cards, opts = {}) {
-      const avail = Math.max(240, (handEl.clientWidth || 390) - 40);
+      const avail = Math.max(240, (handEl.clientWidth || 390) - 40 - (cards.length > 12 ? 18 : 0));
       const nCards = cards.length;
       const { w, ov } = fitHand(nCards, avail, 68, 27);
       handEl.style.setProperty('--hcw', w + 'px');

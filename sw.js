@@ -2,7 +2,7 @@
 // Jede Version wird beim Installieren komplett und frisch aus dem Netz geladen und danach
 // nur aus genau diesem Cache bedient – so werden nie alte und neue Dateien gemischt.
 // Bei jeder Änderung an der App CACHE hochzählen, sonst kommt das Update nicht an.
-const CACHE = 'spiele-v6';
+const CACHE = 'spiele-v7';
 const CORE = [
   './',
   "assets/fonts/jost-400.woff2",

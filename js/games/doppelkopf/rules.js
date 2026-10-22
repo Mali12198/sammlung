@@ -83,6 +83,34 @@ export default {
 <p>Sonderpunkte zählen auch für die Verlierer und werden verrechnet.</p>`,
     },
     {
+      id: 'haus', label: 'Hausregeln', html: `
+<p>Beliebte Hausregeln, die du beim Start einer neuen Liste ein- oder ausschaltest. Die Regel „Zweite Dulle sticht die erste“ findest du im Menü.</p>
+<h3>Schweinchen</h3>
+<p>Hat ein Spieler <b>beide Karo-Asse</b> (${S('D')}A), werden sie zu den <b>höchsten Trümpfen</b> – noch über den Dullen. Das wird zu Spielbeginn angesagt („Schweinchen!“). Schweine zählen nicht als Fuchs: Wer eins fängt, bekommt keinen Sonderpunkt. Im Solo gibt es keine Schweinchen.</p>
+<h3>Armut</h3>
+<ul>
+<li>Wer <b>höchstens drei Trümpfe</b> hat, darf als Vorbehalt <b>Armut</b> ansagen.</li>
+<li>Er legt drei Karten verdeckt ab – darunter <b>alle seine Trümpfe</b>.</li>
+<li>Reihum (links beginnend) darf jeder annehmen. Wer annimmt, nimmt die drei Karten auf und gibt <b>drei beliebige Karten</b> zurück. Wie viele Trümpfe zurückkommen, wird gesagt.</li>
+<li>Die beiden spielen zusammen <b>Re</b> – egal, wer die Kreuz-Damen hat. Gewertet wird wie ein Normalspiel.</li>
+<li>Nimmt niemand an, wird neu gegeben.</li>
+<li>Rangfolge der Vorbehalte: Solo vor Armut vor Hochzeit.</li>
+</ul>
+<h3>Bockrunden</h3>
+<p>Nach besonderen Spielen zählen die nächsten <b>vier Spiele</b> (eine Runde) doppelt. Auslöser hier:</p>
+<ul>
+<li>beide Parteien haben <b>120 Augen</b>,</li>
+<li>ein <b>Nullspiel</b> (die Punkte heben sich auf),</li>
+<li>eine Partei hat <b>Re oder Kontra angesagt und verloren</b>.</li>
+</ul>
+<p>Neue Auslöser verlängern die Bockrunde. Am Tisch steht dann „Bock“.</p>
+<h3>Tipps zur Armut</h3>
+<ul>
+<li>Nimm eine Armut nur mit vielen und hohen Trümpfen an – ihr zwei braucht die Trümpfe für beide.</li>
+<li>Gib Fehlkarten aus deinen kürzesten Farben zurück: So kannst du später stechen. Asse darf der Arme gern bekommen – er ist ja dein Partner.</li>
+</ul>`,
+    },
+    {
       id: 'tricks', label: 'Tricks', html: `
 <h3>Partner finden</h3>
 <ul>

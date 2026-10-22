@@ -624,7 +624,7 @@ export function mount(ui) {
   function bockNote() {
     const s = g.s;
     if (!s.bockWhy || !s.bockWhy.length) return null;
-    return h('p', { class: 'advice', html: `<b>Bockrunde!</b> Wegen ${s.bockWhy.join(' und ')} zählen die nächsten Spiele doppelt (noch ${g.bock}).` });
+    return h('p', { class: 'advice', html: `<b>Bockrunde!</b> Auslöser: ${s.bockWhy.join(', ')}. Die nächsten ${g.bock} Spiele zählen doppelt.` });
   }
 
   async function showRamschResult() {

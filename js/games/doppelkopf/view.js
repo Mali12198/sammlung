@@ -3,13 +3,22 @@ import { h, dialog, toast, sleep } from '../../ui.js';
 import { load, save, addResult, delay } from '../../store.js';
 import { cardTable } from '../../cards/table.js';
 import { cardEl } from '../../cards/render.js';
-import { choosePlayers, handover } from '../../players.js';
+import { choosePlayers, handover, rulesForm } from '../../players.js';
 import { clone } from '../../util.js';
 import {
   newRound, sayVorbehalt, aiVorbehalt, hasBothQueens, legalFor, playCard, collectTrick, currentWinner, aiCard, aiAnnounce,
   announce, nextAnnouncement, annText, teamOf, policy, lookahead, sortHand, isTrump, effSuit, cardsPoints, cardName,
   GAME_NAME, SOLOS, isSolo, soloStrength, handStrength, SUIT_NAME, LEVEL_NAME, SOLO_NEED,
+  rankType, canArmut, armutAnswer, armutReturn, aiArmutAccept, aiArmutReturn,
 } from './engine.js';
+
+// Hausregeln (auf dem Startbildschirm wählbar)
+const RULE_INFO = {
+  schwein: { label: 'Schweinchen', text: 'Wer beide Karo-Asse hat, macht sie zu den höchsten Trümpfen – noch über den Dullen' },
+  armut: { label: 'Armut', text: 'Mit höchstens drei Trümpfen gibst du drei Karten ab; wer sie annimmt, spielt mit dir (Re)' },
+  bock: { label: 'Bockrunden', text: 'Nach 120:120, einem Nullspiel oder einer verlorenen Ansage zählen die nächsten vier Spiele doppelt' },
+};
+const RULE_DEFAULTS = { schwein: true, armut: true, bock: true };
 
 const N = 4;
 const POS = ['bottom', 'left', 'top', 'right'];
@@ -27,6 +36,7 @@ const SOLO_INFO = {
 export function mount(ui) {
   let g = load('save:doppelkopf');
   let token = 0, busy = false, hintCards = new Set(), pending = null, soloPick = false;
+  let armSel = new Set();   // Karten, die bei Armut zurückgegeben werden
   let viewer = 0;
 
   const players = () => (g && g.players) || DEFAULT_PLAYERS;
@@ -44,18 +54,21 @@ export function mount(ui) {
   function setViewer(p) {
     viewer = p;
     table.setNames([0, 1, 2, 3].map(sl => nameOf(seatAt(sl))));
-    hintCards = new Set(); pending = null; soloPick = false;
+    hintCards = new Set(); pending = null; soloPick = false; armSel = new Set();
   }
 
-  function fresh(keep, newPlayers) {
+  function fresh(keep, newPlayers, newRules, sameDealer = false) {
     const old = g;
-    const dealer = old && keep ? (old.dealer + 1) % 4 : 3;
+    const dealer = old && keep ? (sameDealer ? old.dealer : (old.dealer + 1) % 4) : 3;
+    const rules = newRules || (old && old.rules) || ui.option('rules', RULE_DEFAULTS);
+    const bock = keep && old ? old.bock || 0 : 0;
     g = {
-      s: newRound(dealer, { dulle2: !!ui.option('dulle2', false) }), dealer,
+      s: newRound(dealer, { dulle2: !!ui.option('dulle2', false), schwein: rules.schwein, armut: rules.armut, bock: rules.bock && bock > 0 }), dealer,
       players: newPlayers || (old && old.players) || DEFAULT_PLAYERS,
       scores: keep && old ? old.scores : [0, 0, 0, 0],
       list: keep && old ? old.list : [],
       tipsShown: old ? old.tipsShown || {} : {},
+      rules, bock,
     };
     setViewer(humans()[0] ?? 0);
     persist();
@@ -65,6 +78,7 @@ export function mount(ui) {
   function actor() {
     const s = g.s;
     if (s.phase === 'vorbehalt') return s.vb.turn;
+    if (s.phase === 'armut') return s.arm.stage === 'offer' ? s.arm.turn : s.arm.stage === 'return' ? s.arm.partner : -1;
     if (s.phase === 'play') return s.turn;
     return -1;
   }
@@ -74,10 +88,11 @@ export function mount(ui) {
   function roleOf(p) {
     const s = g.s;
     const parts = [];
-    if (s.phase === 'vorbehalt') {
+    if (s.phase === 'vorbehalt' || s.phase === 'redeal') {
       if (p === s.first) parts.push('kommt raus');
       return parts.join(' · ');
     }
+    if (s.phase === 'armut') return p === s.armer ? '<b>Armut</b>' : p === s.arm.partner ? 'nimmt an' : '';
     const k = s.known[p];
     if (isSolo(s.type)) parts.push(p === s.soloist ? '<b>Solist</b>' : 'Kontra');
     else if (k) parts.push(`<b>${k === 're' ? 'Re' : 'Kontra'}</b>`);
@@ -96,25 +111,28 @@ export function mount(ui) {
       const p = seatAt(sl);
       table.setSeat(sl, {
         role: roleOf(p),
-        on: (s.phase === 'play' && s.turn === p) || (s.phase === 'vorbehalt' && s.vb.turn === p),
+        on: (s.phase === 'play' && s.turn === p) || (s.phase === 'vorbehalt' && s.vb.turn === p) || (s.phase === 'armut' && actor() === p),
         count: s.hands[p].length,
       });
     }
     const winner = s.phase === 'collect' ? s.trick.findIndex(x => x.p === currentWinner(s)) : -1;
     table.renderTrick(s.trick.map(x => ({ p: slot(x.p), c: x.c })), { winner });
-    let left = 'Vorbehalte';
-    if (s.phase !== 'vorbehalt') {
+    let left = s.phase === 'redeal' ? 'Neu geben' : 'Vorbehalte';
+    if (s.phase !== 'vorbehalt' && s.phase !== 'redeal') {
       left = `<b>${GAME_NAME[s.type]}</b>`;
       if (isSolo(s.type)) left += ` · ${s.soloist === viewer ? 'du' : nameOf(s.soloist)}`;
       if (s.type === 'hochzeit') left += ` · ${s.hochzeiter === viewer ? 'du' : nameOf(s.hochzeiter)}`;
+      if (s.type === 'armut') left += ` · ${s.armer === viewer ? 'du' : nameOf(s.armer)}${s.arm.partner >= 0 ? ' & ' + (s.arm.partner === viewer ? 'du' : nameOf(s.arm.partner)) : ''}`;
+      if (s.schwein >= 0) left += ' · Schwein';
       const a = [];
       if (s.ann.re) a.push(s.ann.re === 1 ? 'Re' : 'Re ' + LEVEL_NAME[s.ann.re]);
       if (s.ann.kontra) a.push(s.ann.kontra === 1 ? 'Kontra' : 'Kontra ' + LEVEL_NAME[s.ann.kontra]);
       if (a.length) left += ' · ' + a.join(', ');
     }
+    if (s.bock) left += ' · <b class="tag-bock">Bock</b>';
     const sc = g.scores[viewer];
     table.setPills(left, `${multi() ? players()[viewer].name : 'Konto'}: <b>${sc > 0 ? '+' : ''}${sc}</b>`, showList);
-    const t = s.phase === 'vorbehalt' ? 'normal' : s.type;
+    const t = s.phase === 'vorbehalt' || s.phase === 'armut' || s.phase === 'redeal' ? 'normal' : rankType(s);
     const cards = sortHand(s.hands[viewer], t);
     const myTurn = s.phase === 'play' && s.turn === viewer && isHuman(viewer);
     const legal = myTurn ? legalFor(s, viewer) : null;
@@ -122,13 +140,21 @@ export function mount(ui) {
     for (const hc of hintCards) { const i = cards.indexOf(hc); if (i >= 0) hintIdx.add(i); }
     table.renderHand(cards, {
       playable: i => !myTurn || legal.includes(cards[i]),
-      selected: new Set(pending ? [cards.indexOf(pending)] : []),
+      selected: armSelIdx(cards, pending),
       hint: hintIdx,
       trump: c => isTrump(c, t),
       onTap: i => onCard(cards[i]),
     });
     renderPhase();
     ui.setSubtitle(humans().length === 4 ? 'Zu viert' : `Computer ${ui.level()}`);
+  }
+
+  function armSelIdx(cards, pend) {
+    const res = new Set();
+    if (pend) res.add(cards.indexOf(pend));
+    const used = new Set();
+    for (const c of armSel) { const i = cards.findIndex((x, k) => x === c && !used.has(k)); if (i >= 0) { res.add(i); used.add(i); } }
+    return res;
   }
 
   const btn = (label, onclick, primary, attrs = {}) => h('button', { class: 'btn' + (primary ? ' btn-primary' : ''), onclick, ...attrs }, label);
@@ -142,6 +168,20 @@ export function mount(ui) {
       if (s.vb.turn !== me || busy) { table.setStatus(`${nameOf(s.vb.turn)} überlegt …`); return; }
       table.setStatus('Hast du einen Vorbehalt?');
       table.setCenter(soloPick ? soloPanel() : vbPanel());
+      return;
+    }
+    if (s.phase === 'armut') {
+      const a = actor();
+      if (a !== me || busy || !isHuman(me)) { table.setStatus(`${nameOf(a)} überlegt …`); return; }
+      if (s.arm.stage === 'offer') { table.setStatus('Nimmst du die Armut?'); table.setCenter(armutOfferPanel()); return; }
+      table.setStatus(armSel.size < 3 ? `Tippe ${3 - armSel.size === 1 ? 'noch eine Karte' : (3 - armSel.size) + ' Karten'} zum Zurückgeben an.` : 'Jetzt zurückgeben.');
+      table.setCenter(armutReturnPanel());
+      return;
+    }
+    if (s.phase === 'redeal') {
+      table.setStatus('Niemand nimmt die Armut.');
+      table.setCenter(h('div', { class: 'panel' }, h('h3', {}, 'Neu geben'), h('p', {}, `Niemand wollte mit ${nameOf(s.armer)} spielen. Die Karten werden neu gegeben – derselbe Geber.`),
+        h('div', { class: 'btn-row' }, btn('Neu geben', () => nextRound(true), true))));
       return;
     }
     if (s.phase === 'play' || s.phase === 'collect') {
@@ -161,7 +201,7 @@ export function mount(ui) {
     }
     if (s.phase === 'done') {
       table.setStatus('Spiel vorbei.');
-      table.setActions([btn('Ergebnis', showResult), btn('Nächstes Spiel', nextRound, true)]);
+      table.setActions([btn('Ergebnis', showResult), btn('Nächstes Spiel', () => nextRound(), true)]);
     }
   }
 
@@ -196,11 +236,54 @@ export function mount(ui) {
         ? `Trainer: Ein <b>${GAME_NAME[best.t]}</b> sieht stark aus.`
         : (both ? 'Trainer: Hochzeit ist hier die sichere Wahl.' : `Trainer: Für ein Solo reicht das Blatt nicht – spiel gesund.${myTeamHint()}`) }));
     }
+    const arm = canArmut(s, viewer);
+    if (arm && !both) kids.push(h('p', { class: 'advice', html: `Du hast nur ${hand.filter(c => isTrump(c, 'normal')).length} Trümpfe – du darfst <b>Armut</b> ansagen: Deine Trümpfe gehen an einen Partner, der dir drei Karten zurückgibt.` }));
     kids.push(h('div', { class: 'btn-row' },
       btn('Solo …', () => { soloPick = true; render(); }),
       both ? btn('Hochzeit', () => doVb('hochzeit'), true) : null,
-      btn('Gesund', () => doVb('gesund'), !both)));
+      arm && !both ? btn('Armut', () => doVb('armut'), true) : null,
+      btn('Gesund', () => doVb('gesund'), !both && !arm)));
     return h('div', { class: 'panel' }, kids);
+  }
+
+  function armutOfferPanel() {
+    const s = g.s;
+    const kids = [h('h3', {}, `${nameOf(s.armer)} hat Armut`),
+      h('p', { html: `${nameOf(s.armer)} hat höchstens drei Trümpfe und gibt dir drei Karten (darunter <b>${s.arm.trumps} ${s.arm.trumps === 1 ? 'Trumpf' : 'Trümpfe'}</b>). Nimmst du an, spielt ihr zusammen <b>Re</b> – du gibst danach drei Karten zurück.` })];
+    if (ui.coachOn()) {
+      const ok = aiArmutAccept(s, viewer, 'mittel');
+      kids.push(h('p', { class: 'advice' }, ok ? 'Trainer: Mit deinen Trümpfen kannst du die Armut gut tragen – annehmen!' : 'Trainer: Dafür hast du zu wenige starke Trümpfe – lieber ablehnen.'));
+    }
+    kids.push(h('div', { class: 'btn-row' }, btn('Nein', () => doArmut(false)), btn('Annehmen', () => doArmut(true), true)));
+    return h('div', { class: 'panel' }, kids);
+  }
+
+  function armutReturnPanel() {
+    const s = g.s;
+    return h('div', { class: 'panel' },
+      h('h3', {}, 'Drei Karten zurückgeben'),
+      h('p', { html: `Du hast die Karten von ${nameOf(s.armer)} bekommen. Gib ihm drei beliebige Karten zurück – am besten Fehlkarten, damit du Farben blank bekommst. <b>Hohe Trümpfe behältst du.</b>` }),
+      h('div', { class: 'btn-row' },
+        btn('Vorschlag', () => { armSel = new Set(aiArmutReturn(s, viewer)); render(); }),
+        btn('Zurückgeben', () => doArmutReturn(), true, { disabled: armSel.size !== 3 })));
+  }
+
+  function doArmut(yes) {
+    const s = g.s;
+    if (s.phase !== 'armut' || actor() !== viewer || busy) return;
+    armutAnswer(s, viewer, yes);
+    table.bubble(0, yes ? 'Ich nehme!' : 'Nein', 1400);
+    if (yes) armSel = new Set();
+    persist(); render(); advance();
+  }
+
+  function doArmutReturn() {
+    const s = g.s;
+    if (s.phase !== 'armut' || s.arm.stage !== 'return' || s.arm.partner !== viewer || armSel.size !== 3) return;
+    armutReturn(s, viewer, [...armSel]);
+    toast(`Zurückgegeben: ${s.arm.back} ${s.arm.back === 1 ? 'Trumpf' : 'Trümpfe'}.`, 2200);
+    armSel = new Set();
+    persist(); render(); afterVb(); advance();
   }
 
   function soloPanel() {
@@ -230,7 +313,23 @@ export function mount(ui) {
 
   function afterVb() {
     const s = g.s;
+    if (s.phase === 'armut' && s.arm.stage === 'offer' && !s.armShown) {
+      s.armShown = true;
+      if (s.armer !== viewer) table.bubble(slot(s.armer), 'Armut!', 2400);
+      toast(`${nameOf(s.armer)} ${isYou(s.armer) ? 'hast' : 'hat'} Armut – ${s.arm.trumps} ${s.arm.trumps === 1 ? 'Trumpf' : 'Trümpfe'} gehen an einen Partner.`, 2800);
+      coachOnce('armut', { title: 'Armut', text: 'Wer höchstens drei Trümpfe hat, gibt drei Karten (alle Trümpfe) ab. Reihum darf jeder annehmen – wer annimmt, spielt mit ihm zusammen Re und gibt drei Karten zurück. Nimmt keiner an, wird neu gegeben.', ms: 10000 });
+      return;
+    }
     if (s.phase !== 'play') return;
+    if (s.schwein >= 0 && !s.schweinShown) {
+      s.schweinShown = true;
+      if (s.schwein !== viewer || multi()) table.bubble(slot(s.schwein), 'Schweinchen!', 2600);
+      toast(`${nameOf(s.schwein)} ${isYou(s.schwein) ? 'hast' : 'hat'} beide Karo-Asse: Schweinchen! Sie sind jetzt die höchsten Trümpfe.`, 3200);
+    }
+    if (s.type === 'armut' && s.arm.partner >= 0 && !s.armDone) {
+      s.armDone = true;
+      toast(`${nameOf(s.arm.partner)} ${isYou(s.arm.partner) ? 'spielst' : 'spielt'} mit ${nameOf(s.armer)} (Re). Zurück kamen ${s.arm.back} ${s.arm.back === 1 ? 'Trumpf' : 'Trümpfe'}.`, 3200);
+    }
     if (isSolo(s.type)) { if (s.soloist !== viewer) table.bubble(slot(s.soloist), GAME_NAME[s.type] + '!', 2600); if (multi()) toast(`${nameOf(s.soloist)} spielt ${GAME_NAME[s.type]}!`, 2600); }
     if (s.type === 'hochzeit') { if (s.hochzeiter !== viewer) table.bubble(slot(s.hochzeiter), 'Hochzeit!', 2600); if (multi()) toast(`${nameOf(s.hochzeiter)} hat Hochzeit!`, 2600); }
     if (!ui.coachOn() || multi()) return;
@@ -259,6 +358,12 @@ export function mount(ui) {
   function onCard(c) {
     const s = g.s;
     if (busy) return;
+    if (s.phase === 'armut' && s.arm.stage === 'return' && s.arm.partner === viewer) {
+      if (armSel.has(c)) armSel.delete(c);
+      else { if (armSel.size >= 3) armSel.delete([...armSel][0]); armSel.add(c); }
+      render();
+      return;
+    }
     if (s.phase !== 'play' || s.turn !== viewer || !isHuman(viewer)) {
       if (s.phase === 'play') toast(`${nameOf(s.turn)} ist dran.`);
       return;
@@ -353,6 +458,25 @@ export function mount(ui) {
         afterVb();
         continue;
       }
+      if (s.phase === 'armut') {
+        busy = true; render();
+        await sleep(delay(900));
+        if (!alive()) return;
+        if (s.arm.stage === 'offer') {
+          const p = s.arm.turn;
+          const yes = aiArmutAccept(s, p, lv);
+          armutAnswer(s, p, yes);
+          table.bubble(slot(p), yes ? 'Ich nehme!' : 'Nein', 1500);
+        } else {
+          const p = s.arm.partner;
+          armutReturn(s, p, aiArmutReturn(s, p));
+          table.bubble(slot(p), 'Gibt 3 Karten zurück', 1500);
+        }
+        busy = false; persist(); render();
+        afterVb();
+        continue;
+      }
+      if (s.phase === 'redeal') { busy = false; render(); return; }
       if (s.phase === 'play') {
         busy = true; render();
         await sleep(delay(600));
@@ -404,8 +528,17 @@ export function mount(ui) {
       s.counted = true;
       const r = s.result;
       r.scores.forEach((v, p) => { g.scores[p] += v; });
-      g.list.push({ n: g.list.length + 1, type: s.type, winner: r.winner, scores: r.scores.slice(), totals: g.scores.slice() });
+      g.list.push({ n: g.list.length + 1, type: s.type, winner: r.winner, scores: r.scores.slice(), totals: g.scores.slice(), bock: s.bock });
       if (humans().length === 1) addResult('doppelkopf', r.scores[humans()[0]] > 0);
+      if (s.bock) g.bock = Math.max(0, (g.bock || 0) - 1);
+      s.bockWhy = [];
+      if (g.rules && g.rules.bock) {
+        if (r.pts.re === 120) s.bockWhy.push('120 zu 120');
+        else if (r.reScore === 0) s.bockWhy.push('Nullspiel');
+        if (s.ann.re >= 1 && r.winner !== 're') s.bockWhy.push('Re angesagt und verloren');
+        if (s.ann.kontra >= 1 && r.winner !== 'kontra') s.bockWhy.push('Kontra angesagt und verloren');
+        if (s.bockWhy.length) g.bock = (g.bock || 0) + 4;
+      }
       persist();
     }
     render();
@@ -422,12 +555,15 @@ export function mount(ui) {
     const reNames = [0, 1, 2, 3].filter(p => s.re[p]).map(p => (isYou(p) ? 'du' : nameOf(p)));
     const rows = r.lines.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td', { class: 'num' }, '+' + v)));
     for (const e of r.extra) rows.push(h('tr', {}, h('td', {}, `${e.label} (${e.team === 're' ? 'Re' : 'Kontra'})`), h('td', { class: 'num' }, '±1')));
+    if (r.bock > 1) rows.push(h('tr', {}, h('td', {}, 'Bockspiel'), h('td', { class: 'num' }, '× 2')));
     rows.push(h('tr', { class: 'total' }, h('td', {}, isSolo(s.type) || r.solo ? 'Spielwert (Solist ×3)' : 'Spielwert'), h('td', { class: 'num' }, String(Math.abs(r.reScore)))));
     const content = h('div', { class: 'result' },
       h('p', { class: 'result-big ' + (multi() ? 'win' : won ? 'win' : r.scores[me] < 0 ? 'lose' : '') }, title),
       h('p', { html: `Re (${reNames.join(' & ')}): <b>${r.pts.re}</b> Augen · Kontra: <b>${r.pts.kontra}</b> Augen` }),
       h('table', { class: 'result-table' }, rows),
       h('table', { class: 'result-table' }, [0, 1, 2, 3].map(p => h('tr', {}, h('td', {}, nameOf(p) + (s.re[p] ? ' (Re)' : ' (Kontra)')), h('td', { class: 'num' }, (r.scores[p] > 0 ? '+' : '') + r.scores[p])))),
+      s.schwein >= 0 ? h('p', { class: 'small' }, `Schweinchen bei ${nameOf(s.schwein)} – die Karo-Asse zählen nicht als Fuchs.`) : null,
+      s.bockWhy && s.bockWhy.length ? h('p', { class: 'advice', html: `<b>Bockrunde!</b> Auslöser: ${s.bockWhy.join(', ')}. Die nächsten ${g.bock} Spiele zählen doppelt.` }) : null,
     );
     const v = await dialog({ title: 'Abrechnung', content, buttons: [{ label: 'Liste', value: 'list' }, { label: 'Nächstes Spiel', value: 'next', primary: true }], dismissable: true });
     if (v === 'list') { await showList(); return; }
@@ -441,7 +577,9 @@ export function mount(ui) {
       ...(multi() ? [] : [h('td', { class: 'num' }, ((x.scores ? x.scores[me] : x.me) > 0 ? '+' : '') + (x.scores ? x.scores[me] : x.me))])));
     const content = h('div', {},
       g.list.length ? h('table', { class: 'result-table' }, h('tr', {}, h('td', {}, '#'), h('td', {}, 'Spiel'), h('td', {}, 'Sieger'), multi() ? null : h('td', { class: 'num' }, 'Du')), rows) : h('p', {}, 'Noch keine Spiele.'),
-      h('table', { class: 'result-table' }, [0, 1, 2, 3].map(p => h('tr', { class: isYou(p) ? 'total' : '' }, h('td', {}, nameOf(p)), h('td', { class: 'num' }, String(g.scores[p]))))));
+      h('table', { class: 'result-table' }, [0, 1, 2, 3].map(p => h('tr', { class: isYou(p) ? 'total' : '' }, h('td', {}, nameOf(p)), h('td', { class: 'num' }, String(g.scores[p]))))),
+      g.bock ? h('p', { class: 'small', html: `<b class="tag-bock">Bock:</b> noch ${g.bock} ${g.bock === 1 ? 'Spiel zählt' : 'Spiele zählen'} doppelt.` }) : null,
+      h('p', { class: 'small' }, 'Hausregeln: ' + (Object.keys(RULE_INFO).filter(k => g.rules && g.rules[k]).map(k => RULE_INFO[k].label).join(', ') || 'keine') + '.'));
     await dialog({ title: 'Spielliste', content, buttons: [{ label: 'Schließen', value: true, primary: true }], dismissable: true });
   }
 
@@ -455,10 +593,10 @@ export function mount(ui) {
     buttons: [{ label: 'OK', value: true, primary: true }], dismissable: true });
   }
 
-  function nextRound() {
+  function nextRound(sameDealer = false) {
     ui.coach.hide();
     table.clearBubbles();
-    fresh(true);
+    fresh(true, null, null, sameDealer === true);
     render();
     advance();
   }
@@ -472,7 +610,18 @@ export function mount(ui) {
       const best = SOLOS.map(t => ({ t, st: soloStrength(s.hands[me], t) })).sort((a, b) => b.st - a.st)[0];
       if (best.st >= SOLO_NEED.mittel) ui.coach.say({ title: `${GAME_NAME[best.t]} ansagen!`, text: `${SOLO_INFO[best.t]} Mit deinen Karten hast du gute Chancen allein.` });
       else if (hasBothQueens(s.hands[me])) ui.coach.say({ title: 'Hochzeit', text: 'Mit beiden Kreuz-Damen sagst du Hochzeit an. Der Erste, der einen Stich gegen dich macht, wird dein Partner.' });
+      else if (canArmut(s, me)) ui.coach.say({ title: 'Armut ansagen', text: 'Mit so wenigen Trümpfen hast du allein kaum eine Chance. Bei Armut übernimmt ein Partner deine Trümpfe und gibt dir drei Karten zurück.', actions: [{ label: 'Armut', primary: true, onClick: () => doVb('armut') }] });
       else ui.coach.say({ title: 'Gesund', text: ['Für ein Solo brauchst du viele hohe Trümpfe und Asse – das ist hier nicht drin.', myTeamHint().trim()] });
+      return;
+    }
+    if (s.phase === 'armut' && actor() === me) {
+      if (s.arm.stage === 'offer') {
+        const ok = aiArmutAccept(s, me, 'mittel');
+        ui.coach.say({ title: ok ? 'Annehmen' : 'Ablehnen', text: ok ? 'Mit den abgegebenen Trümpfen hast du danach genug Trümpfe, um mit deinem Partner zu gewinnen.' : 'Du hättest auch danach zu wenige hohe Trümpfe. Lass lieber jemand anderen ran.', actions: [{ label: ok ? 'Annehmen' : 'Ablehnen', primary: true, onClick: () => doArmut(ok) }] });
+      } else {
+        armSel = new Set(aiArmutReturn(s, me)); render();
+        ui.coach.say({ title: 'Diese drei zurückgeben', text: 'Ich habe Fehlkarten aus deinen kürzesten Farben markiert – so wirst du frei und kannst später stechen. Hohe Trümpfe behältst du.', actions: [{ label: 'Zurückgeben', primary: true, onClick: doArmutReturn }] });
+      }
       return;
     }
     if (s.phase === 'play' && s.turn === me) {
@@ -506,6 +655,7 @@ export function mount(ui) {
     return h('div', {},
       sw('dulle2', 'Zweite Dulle sticht die erste', 'Beliebte Hausregel (gilt ab dem nächsten Spiel, nicht im letzten Stich)'),
       sw('confirmTap', 'Karte bestätigen', 'Erst antippen, dann noch einmal zum Ausspielen'),
+      h('p', { class: 'small', style: { marginTop: '8px' } }, 'Hausregeln: ' + (Object.keys(RULE_INFO).filter(k => g && g.rules && g.rules[k]).map(k => RULE_INFO[k].label).join(', ') || 'keine') + ' – änderbar bei „Neues Spiel“.'),
       h('button', { class: 'btn btn-quiet', style: { marginTop: '8px' }, onclick: showList }, 'Spielliste ansehen'));
   };
 
@@ -518,13 +668,16 @@ export function mount(ui) {
 
   async function setup(entry) {
     const running = !!(g && g.s);
+    const form = rulesForm(RULE_INFO, (g && g.rules) || ui.option('rules', RULE_DEFAULTS));
     const pl = await choosePlayers({ title: entry ? 'Doppelkopf – wer spielt?' : 'Neue Liste – wer spielt?', min: 4, max: 4, current: players(), entry,
       resume: entry && running ? 'Weiterspielen' : null, resumeSub: entry && running ? `${g.list.length + 1}. Spiel der Liste` : '',
-      note: 'Doppelkopf spielt man zu viert. Freie Plätze übernimmt der Computer. Neu starten setzt alle Konten auf 0.' });
+      note: 'Doppelkopf spielt man zu viert. Freie Plätze übernimmt der Computer. Neu starten setzt alle Konten auf 0.', extra: form.el });
     if (pl === 'resume') { await resumeGame(); return; }
     if (!pl) { if (entry) location.hash = '#/'; return; }
+    const rules = form.value();
+    ui.setOption('rules', rules);
     token++; ui.coach.hide(); table.clearBubbles();
-    veiled = false; g = null; fresh(false, pl); render(); advance(); welcome();
+    veiled = false; g = null; fresh(false, pl, rules); render(); advance(); welcome();
   }
 
   // Weiterspielen: bei mehreren Menschen erst das iPhone übergeben, dann aufdecken.

@@ -12,7 +12,7 @@ export const pts = c => PTS[c[1]];
 export const cardsPoints = cs => cs.reduce((a, c) => a + PTS[c[1]], 0);
 
 export const GAME_NAME = {
-  normal: 'Normalspiel', hochzeit: 'Hochzeit',
+  normal: 'Normalspiel', hochzeit: 'Hochzeit', armut: 'Armut',
   'solo-Q': 'Damensolo', 'solo-J': 'Bubensolo', 'solo-C': 'Kreuzsolo', 'solo-S': 'Piksolo',
   'solo-H': 'Herzsolo', 'solo-D': 'Karosolo', 'solo-0': 'Fleischloser',
 };
@@ -33,8 +33,9 @@ const DECK = newDeck();
 const QJ = { C: 4, S: 3, H: 2, D: 1 };
 const SUITRANK = { A: 4, T: 3, K: 2, 9: 1 };
 
-// Trumpfrang (höher = stärker) oder -1
+// Trumpfrang (höher = stärker) oder -1. Ein „*“ am Spieltyp heißt: Schweinchen – beide Karo-Asse sind die höchsten Trümpfe.
 export function trumpRank(c, type) {
+  if (type.endsWith('*')) { if (c === 'DA') return 110; type = type.slice(0, -1); }
   const s = c[0], r = c[1];
   if (type === 'solo-0') return -1;
   if (type === 'solo-Q') return r === 'Q' ? 90 + QJ[s] : -1;
@@ -96,12 +97,13 @@ export function sortHand(hand, type = 'normal') {
 // ---------------------------------------------------------------
 // Ablauf
 // ---------------------------------------------------------------
+// opts: dulle2 (zweite Dulle sticht), schwein (Schweinchen), armut (Armut erlaubt), bock (dieses Spiel zählt doppelt)
 export function newRound(dealer, opts = {}, rnd = Math.random) {
   const d = shuffle(DECK.slice(), rnd);
   const hands = [0, 1, 2, 3].map(i => d.slice(i * 12, i * 12 + 12));
   const first = (dealer + 1) % 4;
   return {
-    dealer, first, hands, opts: { dulle2: !!opts.dulle2 },
+    dealer, first, hands, opts: { dulle2: !!opts.dulle2, schwein: !!opts.schwein, armut: !!opts.armut }, bock: !!opts.bock, schwein: -1,
     phase: 'vorbehalt', vb: { turn: first, said: [null, null, null, null] },
     type: 'normal', soloist: -1, hochzeiter: -1, klaerung: -1,
     re: [false, false, false, false],
@@ -113,18 +115,25 @@ export function newRound(dealer, opts = {}, rnd = Math.random) {
 }
 
 export const hasBothQueens = hand => hand.filter(c => c === 'CQ').length === 2;
+// Rangtyp für Stichentscheidung und Sortierung (berücksichtigt Schweinchen)
+export const rankType = s => (s.schwein >= 0 ? s.type + '*' : s.type);
+// Armut: höchstens drei Trümpfe (wie im Normalspiel gezählt)
+export const canArmut = (s, p) => !!(s.opts && s.opts.armut) && s.hands[p].filter(c => isTrump(c, 'normal')).length <= 3;
 
-// Vorbehalt: 'gesund' | 'hochzeit' | 'solo-…'
+// Vorbehalt: 'gesund' | 'hochzeit' | 'armut' | 'solo-…'
 export function sayVorbehalt(s, p, what) {
   if (s.phase !== 'vorbehalt' || s.vb.turn !== p) throw new Error('nicht dran');
   if (what === 'hochzeit' && !hasBothQueens(s.hands[p])) throw new Error('keine Hochzeit möglich');
+  if (what === 'armut' && !canArmut(s, p)) throw new Error('keine Armut möglich');
   s.vb.said[p] = what;
   const next = (p + 1) % 4;
   if (next !== s.first) { s.vb.turn = next; return; }
-  // auflösen: erstes Solo in Sitzreihenfolge, sonst Hochzeit, sonst normal
+  // auflösen: erstes Solo in Sitzreihenfolge, sonst Armut, sonst Hochzeit, sonst normal
   const order = [0, 1, 2, 3].map(k => (s.first + k) % 4);
   const solo = order.find(q => isSolo(s.vb.said[q]));
+  const arm = order.find(q => s.vb.said[q] === 'armut');
   const hz = order.find(q => s.vb.said[q] === 'hochzeit');
+  if (solo === undefined && arm !== undefined) { startArmut(s, arm); return; }
   if (solo !== undefined) {
     s.type = s.vb.said[solo]; s.soloist = solo;
     s.re = [0, 1, 2, 3].map(q => q === solo);
@@ -140,9 +149,81 @@ export function sayVorbehalt(s, p, what) {
     if (s.re.filter(Boolean).length === 1) s.silent = s.re.indexOf(true);
   }
   s.vb.turn = -1;
+  startPlay(s);
+}
+
+function startPlay(s) {
   s.phase = 'play';
   s.leader = s.turn = s.first;
+  // Schweinchen: wer beide Karo-Asse hat, macht sie zu den höchsten Trümpfen (nicht im Solo)
+  if (s.opts && s.opts.schwein && !isSolo(s.type)) {
+    const q = [0, 1, 2, 3].find(x => s.hands[x].filter(c => c === 'DA').length === 2);
+    if (q !== undefined) s.schwein = q;
+  }
 }
+
+// ---------------------------------------------------------------
+// Armut: drei Karten (alle Trümpfe) verdeckt abgeben, ein Partner nimmt sie und gibt drei zurück
+// ---------------------------------------------------------------
+export function armutCards(hand) {
+  const tr = hand.filter(c => isTrump(c, 'normal'));
+  const fehl = hand.filter(c => !isTrump(c, 'normal')).sort((a, b) => (pts(a) + (a[1] === 'A' ? 20 : 0)) - (pts(b) + (b[1] === 'A' ? 20 : 0)));
+  return tr.concat(fehl.slice(0, 3 - tr.length));
+}
+function startArmut(s, q) {
+  s.type = 'armut';
+  const cards = armutCards(s.hands[q]);
+  for (const c of cards) s.hands[q].splice(s.hands[q].indexOf(c), 1);
+  s.armer = q;
+  s.arm = { cards, trumps: cards.filter(c => isTrump(c, 'normal')).length, stage: 'offer', turn: (q + 1) % 4, partner: -1, back: 0 };
+  s.vb.turn = -1;
+  s.phase = 'armut';
+}
+export function armutAnswer(s, p, yes) {
+  if (s.phase !== 'armut' || s.arm.stage !== 'offer' || s.arm.turn !== p) throw new Error('nicht dran');
+  if (yes) {
+    s.arm.partner = p; s.arm.stage = 'return';
+    s.hands[p].push(...s.arm.cards);
+    return;
+  }
+  const next = (p + 1) % 4;
+  if (next === s.armer) { s.phase = 'redeal'; s.arm.stage = 'none'; s.hands[s.armer].push(...s.arm.cards); return; }
+  s.arm.turn = next;
+}
+export function armutReturn(s, p, cards) {
+  if (s.phase !== 'armut' || s.arm.stage !== 'return' || s.arm.partner !== p) throw new Error('nicht dran');
+  if (!cards || cards.length !== 3) throw new Error('drei Karten zurückgeben');
+  const hand = s.hands[p].slice();
+  for (const c of cards) { const i = hand.indexOf(c); if (i < 0) throw new Error('Karte fehlt: ' + c); hand.splice(i, 1); }
+  s.hands[p] = hand;
+  s.hands[s.armer].push(...cards);
+  s.arm.back = cards.filter(c => isTrump(c, 'normal')).length;
+  s.arm.stage = 'done';
+  s.re = [0, 1, 2, 3].map(q => q === s.armer || q === p);
+  s.known = s.re.map(x => (x ? 're' : 'kontra'));
+  startPlay(s);
+}
+// Computer: Armut annehmen?
+export function aiArmutAccept(s, p, level = 'mittel') {
+  const hand = s.hands[p].concat(s.arm.cards);
+  const back = aiArmutReturnFrom(hand);
+  const rest = hand.filter((c, i) => { const k = back.indexOf(c); if (k >= 0) { back.splice(k, 1); return false; } return true; });
+  const tr = rest.filter(c => isTrump(c, 'normal')).length;
+  return tr >= 8 && handStrength(rest, 'normal') >= (level === 'leicht' ? 9 : 9.8);
+}
+// Drei Karten zurückgeben: Fehlfarben blank machen, keine hohen Trümpfe
+export function aiArmutReturnFrom(hand) {
+  const fehl = hand.filter(c => !isTrump(c, 'normal'));
+  const len = su => fehl.filter(c => c[0] === su).length;
+  const order = fehl.slice().sort((a, b) => (len(a[0]) - len(b[0])) || (a[1] === 'A') - (b[1] === 'A') || pts(a) - pts(b));
+  const res = order.slice(0, 3);
+  if (res.length < 3) {
+    const tr = hand.filter(c => isTrump(c, 'normal') && c !== 'HT' && c[1] !== 'Q').sort((a, b) => trumpRank(a, 'normal') - trumpRank(b, 'normal'));
+    for (const c of tr) { if (res.length >= 3) break; res.push(c); }
+  }
+  return res.slice(0, 3);
+}
+export const aiArmutReturn = (s, p) => aiArmutReturnFrom(s.hands[p]);
 
 export const teamOf = (s, p) => (s.re[p] ? 're' : 'kontra');
 
@@ -189,7 +270,7 @@ function inferTeams(s) {
 // ---------------------------------------------------------------
 // Stiche
 // ---------------------------------------------------------------
-export function legalFor(s, p) { return legalCards(s.hands[p], s.trick, s.type); }
+export function legalFor(s, p) { return legalCards(s.hands[p], s.trick, rankType(s)); }
 
 export function playCard(s, p, c) {
   if (s.phase !== 'play' || s.turn !== p) throw new Error('nicht am Zug');
@@ -207,7 +288,7 @@ export function playCard(s, p, c) {
 
 export function currentWinner(s) {
   const last = s.tricks.length === 11;
-  const wi = trickWinnerIdx(s.trick.map(x => x.c), s.type, s.opts.dulle2, last);
+  const wi = trickWinnerIdx(s.trick.map(x => x.c), rankType(s), s.opts.dulle2, last);
   return s.trick[wi].p;
 }
 
@@ -287,7 +368,7 @@ export function settle(s) {
     s.tricks.forEach((t, k) => {
       const wt = teamOf(s, t.winner);
       if (cardsPoints(t.cards.map(x => x.c)) >= 40) extra.push({ team: wt, label: 'Doppelkopf' });
-      for (const x of t.cards) if (x.c === 'DA' && teamOf(s, x.p) !== wt) extra.push({ team: wt, label: 'Fuchs gefangen' });
+      if (!(s.schwein >= 0)) for (const x of t.cards) if (x.c === 'DA' && teamOf(s, x.p) !== wt) extra.push({ team: wt, label: 'Fuchs gefangen' });
       if (k === 11) {
         const wc = (t.cards.find(x => x.p === t.winner) || {}).c;
         if (wc === 'CJ') extra.push({ team: wt, label: 'Karlchen' });
@@ -296,12 +377,13 @@ export function settle(s) {
   }
   const exRe = extra.filter(e => e.team === 're').length;
   const exKo = extra.length - exRe;
-  const reScore = (winner === 're' ? game : winner === 'kontra' ? -game : 0) + exRe - exKo;
+  const bock = s.bock ? 2 : 1;
+  const reScore = ((winner === 're' ? game : winner === 'kontra' ? -game : 0) + exRe - exKo) * bock;
   const scores = [0, 1, 2, 3].map(p => {
     if (solo) return s.re[p] ? reScore * 3 : -reScore;
     return s.re[p] ? reScore : -reScore;
   });
-  return { pts, tricks, winner, lines, game, extra, reScore, scores, solo };
+  return { pts, tricks, winner, lines, game, extra, reScore, scores, solo, bock };
 }
 
 // ---------------------------------------------------------------
@@ -342,6 +424,7 @@ export function aiVorbehalt(s, p, level = 'mittel') {
   }
   if (best) return best.t;
   if (hasBothQueens(hand)) return 'hochzeit';
+  if (s.phase === 'vorbehalt' && canArmut(s, p)) return 'armut';
   return 'gesund';
 }
 
@@ -400,7 +483,7 @@ export function viewTeams(s, p) {
 }
 
 function ctx(s, p) {
-  const type = s.type;
+  const type = rankType(s);
   const seen = s.hands[p].slice();
   for (const t of s.tricks) for (const x of t.cards) seen.push(x.c);
   for (const x of s.trick) seen.push(x.c);

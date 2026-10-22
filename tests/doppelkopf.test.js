@@ -1,15 +1,21 @@
 import {
   newRound, sayVorbehalt, aiVorbehalt, playCard, collectTrick, aiCard, legalFor, trickWinnerIdx, trumpRank,
   nextAnnouncement, announce, aiAnnounce, cardsPoints, settle, policy, sortHand, isTrump,
+  armutAnswer, armutReturn, aiArmutAccept, aiArmutReturn, canArmut, rankType,
 } from '../js/games/doppelkopf/engine.js';
 import { seeded } from '../js/util.js';
 
-export function playRound(dealer, levels, rnd, { force, dulle2 = false } = {}) {
-  const s = newRound(dealer, { dulle2 }, rnd);
+export function playRound(dealer, levels, rnd, { force, dulle2 = false, schwein = false, armut = false, bock = false } = {}) {
+  const s = newRound(dealer, { dulle2, schwein, armut, bock }, rnd);
   while (s.phase === 'vorbehalt') {
     const p = s.vb.turn;
     sayVorbehalt(s, p, force && force[p] ? force[p] : aiVorbehalt(s, p, levels[p]));
   }
+  while (s.phase === 'armut') {
+    if (s.arm.stage === 'offer') armutAnswer(s, s.arm.turn, aiArmutAccept(s, s.arm.turn, levels[s.arm.turn]));
+    else armutReturn(s, s.arm.partner, aiArmutReturn(s, s.arm.partner));
+  }
+  if (s.phase === 'redeal') return s;
   let g = 0;
   while (s.phase !== 'done' && g++ < 200) {
     if (s.phase === 'collect') { collectTrick(s); continue; }
@@ -101,6 +107,43 @@ export default function (t) {
       }
     }
     t.ok(found > 0, 'mindestens eine Hochzeit');
+  });
+  t('Schweinchen: beide Karo-Asse über den Dullen', () => {
+    t.ok(trumpRank('DA', 'normal*') > trumpRank('HT', 'normal*'));
+    t.eq(trickWinnerIdx(['HT', 'DA', 'CQ', 'D9'], 'normal*'), 1);
+    t.eq(trickWinnerIdx(['DA', 'DA', 'HT', 'D9'], 'normal*'), 0, 'gleiche Karte: die erste');
+    const rnd = seeded(31);
+    let found = 0;
+    for (let i = 0; i < 200 && found < 8; i++) {
+      const s = playRound(i % 4, ['mittel', 'mittel', 'mittel', 'mittel'], rnd, { schwein: true });
+      if (s.phase === 'redeal' || s.schwein < 0) continue;
+      found++;
+      t.eq(rankType(s), s.type + '*');
+      t.ok(!s.result.extra.some(e => e.label === 'Fuchs gefangen'), 'Schweine sind keine Füchse');
+    }
+    t.ok(found > 0, 'Schweinchen kommt vor');
+  });
+  t('Armut: Abgabe, Annahme, Teams', () => {
+    const rnd = seeded(12);
+    let armut = 0, redeal = 0;
+    for (let i = 0; i < 600 && armut < 12; i++) {
+      const s = playRound(i % 4, ['mittel', 'mittel', 'mittel', 'mittel'], rnd, { armut: true });
+      if (s.phase === 'redeal') { redeal++; t.ok(s.hands.every(h => h.length === 12), 'Karten zurück'); continue; }
+      if (s.type !== 'armut') continue;
+      armut++;
+      t.eq(s.arm.cards.length, 3);
+      t.ok(s.re.filter(Boolean).length === 2 && s.re[s.armer] && s.re[s.arm.partner]);
+      t.eq(s.result.pts.re + s.result.pts.kontra, 240);
+      t.eq(s.result.scores.reduce((a, b) => a + b, 0), 0);
+    }
+    console.log(`       ${armut} Armut-Spiele, ${redeal}× nicht angenommen`);
+    t.ok(armut > 0, 'Armut kommt vor');
+  });
+  t('Bockspiel zählt doppelt', () => {
+    const rnd = seeded(5), rnd2 = seeded(5);
+    const a = playRound(1, ['mittel', 'mittel', 'mittel', 'mittel'], rnd);
+    const b = playRound(1, ['mittel', 'mittel', 'mittel', 'mittel'], rnd2, { bock: true });
+    t.eq(b.result.scores, a.result.scores.map(x => x * 2));
   });
   t('Sortierung', () => t.eq(sortHand(['D9', 'CA', 'HT', 'SQ', 'H9', 'CJ']), ['HT', 'SQ', 'CJ', 'D9', 'CA', 'H9']));
   t('Begründungen vorhanden', () => {
