@@ -7,7 +7,7 @@ export const SUITS = ['C', 'S', 'H', 'D'];
 export const RANKS = ['7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
 export const PTS = { A: 11, T: 10, K: 4, Q: 3, J: 2, 9: 0, 8: 0, 7: 0 };
 export const BASE = { C: 12, S: 11, H: 10, D: 9, G: 24 };
-export const GAME_NAME = { C: 'Kreuz', S: 'Pik', H: 'Herz', D: 'Karo', G: 'Grand', N: 'Null' };
+export const GAME_NAME = { C: 'Kreuz', S: 'Pik', H: 'Herz', D: 'Karo', G: 'Grand', N: 'Null', R: 'Ramsch' };
 export const SUIT_NAME = { C: 'Kreuz', S: 'Pik', H: 'Herz', D: 'Karo' };
 export const RANK_NAME = { 7: 'Sieben', 8: 'Acht', 9: 'Neun', T: 'Zehn', J: 'Bube', Q: 'Dame', K: 'König', A: 'Ass' };
 export const cardName = c => `${SUIT_NAME[c[0]]}-${RANK_NAME[c[1]]}`;
@@ -119,11 +119,13 @@ export function gameValue(g, cards12, extra) {
 // ---------------------------------------------------------------
 // Ablauf
 // ---------------------------------------------------------------
-export function newRound(dealer, rnd = Math.random) {
+// opts: { ramsch, kontra, bock } – Hausregeln (Ramsch statt Einpassen, Kontra/Re, Bockspiel zählt doppelt)
+export function newRound(dealer, rnd = Math.random, opts = {}) {
   const d = shuffle(DECK.slice(), rnd);
   const V = (dealer + 1) % 3, M = (dealer + 2) % 3, H = dealer;
   return {
     dealer, V, M, H,
+    opts: { ramsch: !!opts.ramsch, kontra: !!opts.kontra }, bock: !!opts.bock, kontra: null,
     hands: [d.slice(0, 10), d.slice(10, 20), d.slice(20, 30)],
     skat: d.slice(30),
     phase: 'bid',
@@ -141,6 +143,7 @@ export function bidAction(s, p, action) {
   if (b.stage === 3) {
     if (action === 'play') { b.value = 18; b.said[p] = '18'; return finishBid(s, p); }
     b.said[p] = 'Passe'; b.passed[p] = true;
+    if (s.opts && s.opts.ramsch) return startRamsch(s);
     s.phase = 'allpass';
     return;
   }
@@ -173,6 +176,16 @@ function finishBid(s, p) {
   s.bid.turn = -1;
 }
 
+// Ramsch: alle haben gepasst. Nur Buben sind Trumpf, jeder spielt für sich, wer die meisten Augen hat, verliert.
+// Der Skat geht an den Gewinner des letzten Stichs.
+export function startRamsch(s) {
+  s.game = { type: 'R' };
+  s.declarer = -1;
+  s.put = s.skat.slice();
+  s.phase = 'play';
+  s.leader = s.turn = s.V;
+}
+
 export function takeSkat(s) {
   s.hands[s.declarer].push(...s.skat);
   s.skatTaken = true;
@@ -196,7 +209,21 @@ export function declare(s, game, put) {
   s.decl12 = s.hands[d].concat(s.put);
   s.phase = 'play';
   s.leader = s.turn = s.V;
+  if (s.opts && s.opts.kontra) s.kontra = { by: -1, re: false };
 }
+
+// Kontra: ein Gegenspieler, bevor er seine erste Karte spielt. Re: der Alleinspieler nach Kontra,
+// bevor er seine zweite Karte spielt.
+const playedBy = (s, p) => s.tricks.reduce((a, tr) => a + tr.cards.filter(x => x.p === p).length, 0) + s.trick.filter(x => x.p === p).length;
+export function canKontra(s, p) {
+  return !!s.kontra && s.kontra.by < 0 && s.phase === 'play' && p !== s.declarer && s.turn === p && playedBy(s, p) === 0;
+}
+export function canRe(s, p) {
+  return !!s.kontra && s.kontra.by >= 0 && !s.kontra.re && s.phase === 'play' && p === s.declarer && s.turn === p && playedBy(s, p) < 2;
+}
+export function sayKontra(s, p) { if (!canKontra(s, p)) throw new Error('Kontra nicht möglich'); s.kontra.by = p; }
+export function sayRe(s, p) { if (!canRe(s, p)) throw new Error('Re nicht möglich'); s.kontra.re = true; }
+export const kontraFactor = s => (!s.kontra || s.kontra.by < 0 ? 1 : s.kontra.re ? 4 : 2);
 
 export function legalFor(s, p) { return legalCards(s.hands[p], s.trick, s.game.type); }
 
@@ -224,7 +251,7 @@ export function collectTrick(s) {
   s.leader = s.turn = winner;
   s.phase = 'play';
   const over = s.tricks.length === 10 || (t === 'N' && winner === s.declarer);
-  if (over) { s.phase = 'done'; s.turn = -1; s.result = settle(s); }
+  if (over) { s.phase = 'done'; s.turn = -1; s.result = t === 'R' ? settleRamsch(s) : settle(s); }
   return winner;
 }
 
@@ -257,7 +284,30 @@ export function settle(s) {
     }
     r.schneider = schneider; r.schwarz = schwarz;
   }
-  r.score = r.won ? r.value : -2 * r.value;
+  r.kontra = kontraFactor(s);
+  r.bock = s.bock ? 2 : 1;
+  r.score = (r.won ? r.value : -2 * r.value) * r.kontra * r.bock;
+  return r;
+}
+
+// Ramsch-Abrechnung: Augen je Spieler (Skat an den letzten Stich), Verlierer bekommt seine Augen als Minus.
+// Jungfrau (jemand ohne Stich): doppelt. Durchmarsch (alle Stiche): +120 für den Durchmarschierer.
+export function settleRamsch(s) {
+  const last = s.tricks[s.tricks.length - 1].winner;
+  const pts = [0, 1, 2].map(p => cardsPoints(s.taken[p]) + (p === last ? cardsPoints(s.put) : 0));
+  const tricks = [0, 1, 2].map(p => s.tricks.filter(x => x.winner === p).length);
+  const bock = s.bock ? 2 : 1;
+  const r = { ramsch: true, pts, tricks, skatTo: last, bock, scores: [0, 0, 0], losers: [], durchmarsch: -1, jungfrau: false };
+  const dm = tricks.indexOf(10);
+  if (dm >= 0) {
+    r.durchmarsch = dm;
+    r.scores[dm] = 120 * bock;
+    return r;
+  }
+  const max = Math.max(...pts);
+  r.losers = [0, 1, 2].filter(p => pts[p] === max);
+  r.jungfrau = tricks.some(n => n === 0);
+  for (const p of r.losers) r.scores[p] = -max * (r.jungfrau ? 2 : 1) * bock;
   return r;
 }
 
@@ -485,6 +535,7 @@ export function policy(s, p) {
   if (legal.length === 1) return { card: legal[0], why: 'Das ist deine einzige erlaubte Karte.' };
   const C = ctx(s, p);
   if (C.t === 'N') return nullPolicy(C, legal);
+  if (C.t === 'R') return ramschPolicy(C, legal);
   const ti = trickInfo(C);
   if (!ti) return C.isDecl ? declLead(C, legal) : defLead(C, legal);
   return follow(C, legal, ti);
@@ -626,6 +677,81 @@ function nullPolicy(C, legal) {
   return { card: high, why: 'Den Stich bekommt ihr ohnehin – nutze ihn, um eine hohe Karte loszuwerden.' };
 }
 
+// Ramsch: möglichst wenig Augen nehmen. Drunterbleiben, hohe Karten loswerden, früh Farben blank machen.
+function ramschPolicy(C, legal) {
+  const t = 'R';
+  const ti = trickInfo(C);
+  const higher = c => C.others.filter(o => effSuit(o, t) === effSuit(c, t) && power(o, t) > power(c, t)).length;
+  const lenOf = c => C.hand.filter(x => effSuit(x, t) === effSuit(c, t)).length;
+  if (!ti) {
+    // Anspielen: eine Karte, die sicher überstochen wird – gern aus einer kurzen Farbe
+    const score = c => (c[1] === 'J' ? -6 : 0) + Math.min(higher(c), 3) * 2 - pts(c) * 0.25 - lenOf(c) * 0.4 - (higher(c) === 0 ? 8 : 0);
+    const c = legal.slice().sort((a, b) => score(b) - score(a))[0];
+    return { card: c, why: higher(c) ? 'Im Ramsch willst du keine Stiche: Spiel eine kleine Karte an, die sicher überstochen wird – am besten aus einer kurzen Farbe, damit du sie bald nicht mehr hast.' : 'Leider hast du nur noch Karten, die gewinnen könnten – nimm die mit den wenigsten Augen.' };
+  }
+  const win = ti.win.c;
+  const last = ti.n === 2;
+  const follows = legal.filter(c => effSuit(c, t) === ti.led);
+  if (follows.length) {
+    const under = follows.filter(c => !beats(c, win, t));
+    if (under.length) {
+      const c = under.sort((a, b) => power(b, t) - power(a, t))[0];
+      return { card: c, why: `Drunterbleiben: ${nm(c)} ist deine höchste Karte, die den Stich nicht gewinnt – so wirst du sie gefahrlos los.` };
+    }
+    if (last) {
+      const c = follows.sort((a, b) => power(b, t) - power(a, t))[0];
+      return { card: c, why: 'Den Stich musst du nehmen – dann wenigstens mit deiner höchsten Karte dieser Farbe, die dir später sonst wieder einen Stich einbrockt.' };
+    }
+    const c = follows.sort((a, b) => power(a, t) - power(b, t))[0];
+    return { card: c, why: 'Du musst höher bedienen – nimm die kleinste Karte, vielleicht sticht noch jemand drüber.' };
+  }
+  // Nicht bedienen: dicke Karten abwerfen (die Augen bekommt ein anderer), Buben möglichst behalten
+  const side = legal.filter(c => c[1] !== 'J');
+  if (side.length) {
+    const c = side.sort((a, b) => (pts(b) * 2 + power(b, t)) - (pts(a) * 2 + power(a, t)))[0];
+    return { card: c, why: `Du kannst nicht bedienen: Wirf ${nm(c)} ab – die Augen landen bei einem anderen.` };
+  }
+  const under = legal.filter(c => !beats(c, win, t));
+  const c = (under.length ? under : legal).sort((a, b) => power(a, t) - power(b, t))[0];
+  return { card: c, why: 'Nur noch Buben – der kleinste reicht.' };
+}
+
+// Kontra/Re des Computers: Gewinnchance des Alleinspielers per Simulation schätzen
+// Aus Sicht eines Gegenspielers: nur Verteilungen, bei denen der Alleinspieler sein Spiel auch ansagen würde.
+function plausibleForDeclarer(w) {
+  const t = w.game.type, d = w.declarer;
+  const cards = w.hands[d].concat(w.put || []);
+  if (t === 'N') return nullRisk(w.hands[d]) <= 1;
+  const st = strength(w.hands[d], t, w.put || []);
+  return st >= (t === 'G' ? GRAND_THRESH.mittel : THRESH.mittel) - 0.8 && (t === 'G' || cards.filter(c => isTrump(c, t)).length >= 5);
+}
+export function declarerWinChance(s, p, samples = 24, rnd = Math.random) {
+  let wins = 0;
+  for (let k = 0; k < samples; k++) {
+    let w = sampleWorld(s, p, rnd);
+    if (p !== s.declarer) for (let a = 0; a < 30 && !plausibleForDeclarer(w); a++) w = sampleWorld(s, p, rnd);
+    rolloutState(w);
+    if (w.result && w.result.won) wins++;
+  }
+  return wins / samples;
+}
+function rolloutState(w) {
+  let guard = 0;
+  while (w.phase !== 'done' && guard++ < 60) {
+    if (w.phase === 'collect') { collectTrick(w); continue; }
+    playCard(w, w.turn, policy(w, w.turn).card);
+  }
+  if (w.phase === 'done' && !w.result) w.result = settle(w);
+}
+export function aiKontra(s, p, level = 'mittel', rnd = Math.random) {
+  if (!canKontra(s, p) || level === 'leicht') return false;
+  return declarerWinChance(s, p, level === 'schwer' ? 32 : 20, rnd) < (level === 'schwer' ? 0.3 : 0.25);
+}
+export function aiRe(s, p, level = 'mittel', rnd = Math.random) {
+  if (!canRe(s, p) || level === 'leicht') return false;
+  return declarerWinChance(s, p, level === 'schwer' ? 32 : 20, rnd) > 0.8;
+}
+
 // ---------------------------------------------------------------
 // Vorausschau per Simulation (Spielstärke „schwer“ und Tipps)
 // ---------------------------------------------------------------
@@ -675,6 +801,10 @@ export function sampleWorld(s, p, rnd = Math.random) {
 }
 
 function finalUtility(w, p) {
+  if (w.game.type === 'R') {
+    const r = settleRamsch(w);
+    return 120 - r.pts[p] - (r.losers.includes(p) ? 40 : 0) + (r.durchmarsch === p ? 150 : 0);
+  }
   const r = settle(w);
   const mine = p === w.declarer;
   if (w.game.type === 'N') return (r.won === mine) ? 100 : 0;

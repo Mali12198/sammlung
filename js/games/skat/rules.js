@@ -94,6 +94,37 @@ export default {
 </table>`,
     },
     {
+      id: 'haus', label: 'Hausregeln', html: `
+<p>Diese beliebten Kneipen-Regeln schaltest du beim Start einer neuen Liste ein oder aus.</p>
+<h3>Ramsch</h3>
+<p>Passen alle drei, wird nicht neu gegeben, sondern <b>Ramsch</b> gespielt:</p>
+<ul>
+<li>Jeder spielt für sich. Trumpf sind nur die vier <b>Buben</b> (wie im Grand).</li>
+<li>Vorhand spielt aus. Der Skat geht an den, der den <b>letzten Stich</b> macht.</li>
+<li>Wer die <b>meisten Augen</b> hat, verliert und bekommt sie als Minuspunkte. Bei Gleichstand verlieren beide.</li>
+<li><b>Jungfrau:</b> Hat ein Spieler keinen einzigen Stich gemacht, zahlt der Verlierer doppelt.</li>
+<li><b>Durchmarsch:</b> Wer alle zehn Stiche macht, bekommt +120.</li>
+</ul>
+<h3>Kontra und Re</h3>
+<p>Glaubt ein Gegenspieler, dass der Alleinspieler verliert, sagt er <b>„Kontra“</b> – bevor er seine erste Karte spielt. Das Spiel zählt dann doppelt. Der Alleinspieler kann mit <b>„Re“</b> antworten (bis zu seiner zweiten Karte): Dann zählt es vierfach. Das gilt im Guten wie im Schlechten – ein verlorenes Re-Spiel ist teuer.</p>
+<h3>Bockrunden</h3>
+<p>Nach besonderen Spielen folgt eine <b>Bockrunde</b>: Die nächsten <b>drei Spiele</b> zählen doppelt (auch Ramsch). Auslöser hier:</p>
+<ul>
+<li>ein Spiel endet <b>60 zu 60</b>,</li>
+<li>es wurde <b>Kontra</b> gesagt,</li>
+<li>ein <b>Grand Hand</b> wurde gewonnen.</li>
+</ul>
+<p>Kommt während einer Bockrunde ein neuer Auslöser, verlängert sie sich um drei Spiele. Oben links am Tisch steht „Bock“, solange sie läuft.</p>
+<h3>Tricks im Ramsch</h3>
+<ul>
+<li>Spiel kleine Karten an, die sicher überstochen werden.</li>
+<li>Bleib beim Bedienen <b>unter</b> der höchsten Karte im Stich – so wirst du hohe Karten gefahrlos los.</li>
+<li>Kannst du nicht bedienen, wirf <b>Asse und Zehnen</b> ab: Die Augen bekommt ein anderer.</li>
+<li>Mach Farben früh blank – dann kannst du später abwerfen.</li>
+<li>Vorsicht mit Buben: Wer viele hat, muss oft Stiche nehmen.</li>
+</ul>`,
+    },
+    {
       id: 'tricks', label: 'Tricks', html: `
 <h3>Wann reizen?</h3>
 <p>Eine gute Faustregel für ein Farbspiel: <b>mindestens 5 Trümpfe</b> (Buben mitgezählt), davon zwei hohe, und dazu ein Ass oder eine Farbe, die du nicht hast. Für einen Grand brauchst du zwei Buben – am besten ${S('C')}B oder ${S('S')}B – und Asse mit Zehnen.</p>

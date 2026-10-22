@@ -105,3 +105,15 @@ export function handover(name, sub = 'Die anderen schauen bitte weg.') {
 }
 
 export const humanCount = players => players.filter(p => p.human).length;
+
+// Hausregeln als Schalter (für choosePlayers({ extra })). info: { key: { label, text } }
+export function rulesForm(info, cur = {}, title = 'Hausregeln') {
+  const val = { ...cur };
+  const box = h('div', { class: 'rules-form' }, h('p', { class: 'field-label' }, title));
+  for (const k of Object.keys(info)) {
+    const i = h('input', { type: 'checkbox', class: 'switch', onchange: e => { val[k] = e.target.checked; } });
+    i.checked = !!val[k];
+    box.append(h('label', { class: 'switch-row' }, h('span', {}, info[k].label, h('small', {}, info[k].text)), i));
+  }
+  return { el: box, value: () => ({ ...val }) };
+}
