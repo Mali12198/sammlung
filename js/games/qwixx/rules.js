@@ -32,7 +32,15 @@ export default {
 <tr><th>Kreuze</th><td class="num">7</td><td class="num">8</td><td class="num">9</td><td class="num">10</td><td class="num">11</td><td class="num">12</td></tr>
 <tr><th>Punkte</th><td class="num">28</td><td class="num">36</td><td class="num">45</td><td class="num">55</td><td class="num">66</td><td class="num">78</td></tr>
 </table>
-<p>Jede Reihe wird einzeln gewertet, dann zusammengezählt. Jeder Fehlwurf kostet 5 Punkte.</p>`,
+<p>Jede Reihe wird einzeln gewertet, dann zusammengezählt. Jeder Fehlwurf kostet 5 Punkte.</p>
+
+<h3>Hausregeln (wählbar beim Start)</h3>
+<ul>
+<li><b>Kurzes Spiel:</b> Die Partie endet schon, wenn <b>eine</b> Reihe abgeschlossen ist oder jemand seinen <b>dritten</b> Fehlwurf nimmt. Ideal für zwischendurch.</li>
+<li><b>Neuwurf-Joker:</b> Jeder hat einmal pro Partie einen Joker. Direkt nach deinem eigenen Wurf – bevor irgendwer ankreuzt – darfst du damit alle Würfel neu werfen. Das goldene „J“ neben deinem Namen zeigt, dass er noch frei ist.</li>
+<li><b>Früh abschließen:</b> Das letzte Feld einer Reihe darfst du schon ab <b>drei</b> statt fünf Kreuzen ankreuzen. Das Spiel wird schneller und angriffslustiger.</li>
+</ul>
+<p>Die Regeln lassen sich frei kombinieren. Alle drei zusammen ergeben eine sehr kurze, wilde Partie.</p>`,
     },
     {
       id: 'tricks', label: 'Tricks', html: `
@@ -44,6 +52,8 @@ export default {
 <p>Ein Fehlwurf kostet 5 Punkte. Wer dafür vier Felder überspringen müsste, nimmt besser den Fehlwurf. Gegen Spielende, wenn Reihen bald schließen, sind Lücken dagegen billig.</p>
 <h3>Konzentrieren</h3>
 <p>Zwei, drei lange Reihen bringen mehr als vier kurze: 8 Kreuze in einer Reihe sind 36 Punkte, zweimal 4 Kreuze nur 20.</p>
+<h3>Mit Hausregeln</h3>
+<p><b>Kurzes Spiel</b> und <b>früh abschließen</b>: Lücken sind weniger schlimm, weil die Partie ohnehin bald endet – lieber schnell Kreuze sammeln. Wer vorne liegt, sollte die erste Reihe schließen und damit gewinnen. Den <b>Joker</b> hebst du dir für einen Wurf auf, der dich sonst einen Fehlwurf oder viele Felder kosten würde.</p>
 <h3>Abschließen als Waffe</h3>
 <p>Liegst du vorne, schließ Reihen ab, sobald du darfst – das beendet das Spiel schneller und nimmt den Gegnern Felder weg.</p>`,
     },

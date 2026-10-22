@@ -8,7 +8,8 @@ export const CPU_NAMES = ['Lotte', 'Karl', 'Hanne', 'Otto', 'Grete', 'Paul'];
 // seats: feste Platzanzahl ODER min/max für eine wählbare Anzahl.
 // lockedCpu: Plätze, die immer Computer sind (z. B. nie)
 // resume: Beschriftung für „laufende Partie fortsetzen“ (liefert 'resume'); entry: Start-Bildschirm beim Öffnen des Spiels.
-export function choosePlayers({ title = 'Wer spielt mit?', min = 2, max = 2, count, current, note, allowNoHuman = false, labels, resume = null, resumeSub = '', entry = false } = {}) {
+// extra: zusätzliches Element unter der Spielerliste (z. B. Hausregeln).
+export function choosePlayers({ title = 'Wer spielt mit?', min = 2, max = 2, count, current, note, allowNoHuman = false, labels, resume = null, resumeSub = '', entry = false, extra = null } = {}) {
   const saved = load('playerNames', []);
   let n = count || (current ? current.length : min);
   if (n < min) n = min; if (n > max) n = max;
@@ -66,7 +67,7 @@ export function choosePlayers({ title = 'Wer spielt mit?', min = 2, max = 2, cou
     }, h('span', {}, resume), resumeSub ? h('small', {}, resumeSub) : null) : null;
     const content = h('div', {},
       resumeBtn ? h('div', { class: 'resume-box' }, resumeBtn, h('p', { class: 'resume-or' }, 'oder neu beginnen:')) : null,
-      body);
+      body, extra);
     dialog({
       title, dismissable: !entry, content,
       buttons: [{ label: entry ? 'Zur Sammlung' : 'Abbrechen', value: null }, { label: resume ? 'Neu starten' : 'Los geht’s', value: 'go', primary: !resume }],

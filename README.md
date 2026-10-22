@@ -10,7 +10,7 @@ Sieben Klassiker gegen den Computer oder mit Freunden an einem Gerät – als We
 | **Doppelkopf** | 1–4 Menschen, Rest Computer | DDV-Regeln mit Neunen, Hochzeit, alle Soli, Ansagen bis „schwarz“, Fuchs/Doppelkopf/Karlchen, Hausregel „zweite Dulle“ |
 | **Skat** | 1–3 Menschen, Rest Computer | Reizen, Hand, Drücken, Farb-/Grand-/Nullspiele (auch ouvert), Spitzen, Schneider/Schwarz, Überreizen, Skatblock |
 | **Kniffel** | 0–5 Computer | Drei Würfe, Würfel halten, Kniffelblock mit Bonus, Extra-Kniffel/Joker (schaltbar), Bestwert im Solospiel |
-| **Qwixx** | 1–4 Computer | Vier Farbreihen, weiße Summe für alle, Farbkombination für den Aktiven, Fehlwürfe, Reihen abschließen |
+| **Qwixx** | 1–4 Computer | Vier Farbreihen, weiße Summe für alle, Farbkombination für den Aktiven, Fehlwürfe, Reihen abschließen; Hausregeln: kurzes Spiel, Neuwurf-Joker, früh abschließen |
 
 Jedes Spiel hat drei Spielstärken (leicht, mittel, schwer). Bei „schwer“ rechnen die Kartenspiele
 vor jeder Karte viele mögliche Verteilungen durch; beim Kniffel prüft der Computer alle Halte-Möglichkeiten

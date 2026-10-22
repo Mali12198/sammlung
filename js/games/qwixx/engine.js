@@ -7,18 +7,30 @@ export const ROW = {
 };
 export const POINTS = [0, 1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78];
 export const MAX_PEN = 4;
-export const SK = { mittel: 1.6, schwer: 1.3 };
+export const SK = { mittel: 1.6, schwer: 1.3, reroll: -2, fastShort: 0.6, fastEarly: 0.45, fastBoth: 0.25 };
 
-export function newSheet() {
-  const sh = { pen: 0 };
+// Hausregeln (alle aus = Originalregeln)
+//  short:  Kurzes Spiel – Ende schon bei einer geschlossenen Reihe oder drei Fehlwürfen
+//  reroll: Neuwurf-Joker – jeder darf einmal pro Partie direkt nach dem Würfeln alle Würfel neu werfen
+//  early:  Früh abschließen – eine Reihe darf schon ab drei statt fünf Kreuzen abgeschlossen werden
+export const RULES = ['short', 'reroll', 'early'];
+const rule = (s, k) => !!(s.opts && s.opts[k]);
+export const maxPen = s => (rule(s, 'short') ? 3 : MAX_PEN);
+export const rowsToEnd = s => (rule(s, 'short') ? 1 : 2);
+export const marksToClose = s => (rule(s, 'early') ? 3 : 5);
+
+export function newSheet(joker = false) {
+  const sh = { pen: 0, joker };
   for (const c of COLORS) sh[c] = { marks: new Array(11).fill(false), lock: false };
   return sh;
 }
 
-export function newGame(players) {
+export function newGame(players, opts = {}) {
+  const o = Object.fromEntries(RULES.map(k => [k, !!opts[k]]));
   return {
     players: players.map(p => ({ ...p })),
-    sheets: players.map(() => newSheet()),
+    opts: o,
+    sheets: players.map(() => newSheet(o.reroll)),
     closed: { r: false, y: false, g: false, b: false },
     turn: 0, dice: null, phase: 'roll',
     pending: [],             // Spieler, die über die weiße Summe noch entscheiden
@@ -41,7 +53,7 @@ export function canMark(s, p, c, v, closedSnapshot = s.closed) {
   const row = s.sheets[p][c];
   const i = ROW[c].indexOf(v);
   if (i < 0 || i <= lastIdx(row)) return false;
-  if (i === 10 && row.marks.filter(Boolean).length < 5) return false;
+  if (i === 10 && row.marks.filter(Boolean).length < marksToClose(s)) return false;
   return true;
 }
 
@@ -68,6 +80,16 @@ export function roll(s, rnd = Math.random) {
 }
 
 export const whiteSum = s => s.dice.w1 + s.dice.w2;
+
+// Neuwurf-Joker: nur der aktive Spieler, direkt nach dem Wurf (bevor jemand angekreuzt hat)
+export const canReroll = s => rule(s, 'reroll') && s.phase === 'white' && s.pending.length === s.players.length && !!s.sheets[s.turn].joker;
+export function reroll(s, rnd = Math.random) {
+  if (!canReroll(s)) throw new Error('kein Neuwurf möglich');
+  s.sheets[s.turn].joker = false;
+  s.log.push({ p: s.turn, reroll: true });
+  s.phase = 'roll';
+  return roll(s, rnd);
+}
 
 // Weiße Summe: c = Farbe oder null (passen)
 export function markWhite(s, p, c) {
@@ -121,7 +143,7 @@ export function markColor(s, opt) {
 
 function endTurn(s) {
   const closedN = COLORS.filter(c => s.closed[c]).length;
-  if (closedN >= 2 || s.sheets.some(sh => sh.pen >= MAX_PEN)) { s.phase = 'done'; return; }
+  if (closedN >= rowsToEnd(s) || s.sheets.some(sh => sh.pen >= maxPen(s))) { s.phase = 'done'; return; }
   s.turn = (s.turn + 1) % s.players.length;
   if (s.turn === 0) s.round++;
   s.phase = 'roll';
@@ -139,7 +161,9 @@ function progress(s) {
   // 0 am Anfang, ~1 gegen Ende
   const marks = s.sheets.map(sh => COLORS.reduce((a, c) => a + markCount(sh[c]), 0));
   const closed = COLORS.filter(c => s.closed[c]).length;
-  return Math.min(1, Math.max(...marks) / 26 + closed * 0.3 + Math.max(...s.sheets.map(sh => sh.pen)) * 0.12);
+  const short = rule(s, 'short'), early = rule(s, 'early');
+  const full = (short ? 18 : 26) - (early ? 4 : 0);
+  return Math.min(1, Math.max(...marks) / full + closed * (0.6 / rowsToEnd(s)) + Math.max(...s.sheets.map(sh => sh.pen)) * (0.48 / maxPen(s)));
 }
 
 // Wert eines einzelnen Kreuzes (positiv = gut)
@@ -149,13 +173,19 @@ export function markValue(s, p, c, v, level = 'mittel') {
   const skip = i - lastIdx(row) - 1;
   const n = markCount(row);
   const prog = progress(s);
-  const skipCost = (level === 'leicht' ? 0.9 : level === 'schwer' ? SK.schwer : SK.mittel) * (1 - prog * 0.6);
+  // In kurzen Partien sind Lücken billiger – es gibt ohnehin weniger Kreuze.
+  const sh = rule(s, 'short'), ea = rule(s, 'early');
+  const fast = level === 'leicht' ? 1 : sh && ea ? SK.fastBoth : sh ? SK.fastShort : ea ? SK.fastEarly : 1;
+  const skipCost = (level === 'leicht' ? 0.9 : level === 'schwer' ? SK.schwer : SK.mittel) * fast * (1 - prog * 0.6);
   let val = 1 + n * 0.45 - skip * skipCost * (1 + n * 0.08);
   if (i === 10) {
     // Abschließen: Reihe zählt +1, und sie ist für alle zu
     const me = score(s.sheets[p]).total;
     const best = Math.max(...s.sheets.map((sh, k) => (k === p ? -999 : score(sh).total)));
-    val += 3 + (me >= best ? 4 : -3);
+    const after = me + POINTS[Math.min(12, n + 2)] - POINTS[Math.min(12, n)];
+    const closedAfter = COLORS.filter(k => k === c || s.closed[k] || (s.pendingClose && s.pendingClose[k])).length;
+    if (closedAfter >= rowsToEnd(s)) val += after > best ? 12 : -10;   // beendet das Spiel
+    else val += 3 + (me >= best ? 4 : -3);
   }
   // Mitte (7) ist häufig – frühe Kreuze an den Rändern sind wertvoll
   if (n === 0 && skip === 0) val += 0.5;
@@ -163,6 +193,17 @@ export function markValue(s, p, c, v, level = 'mittel') {
 }
 
 function better(a, b) { return !b || a.val > b.val; }
+
+// Was kostet ein Fehlwurf für p? Beendet er das Spiel, kommt es darauf an, wer vorne liegt.
+function penaltyCost(s, p) {
+  const sh = s.sheets[p];
+  if (sh.pen + 1 >= maxPen(s)) {
+    const me = score(sh).total - 5;
+    const best = Math.max(...s.sheets.map((x, k) => (k === p ? -999 : score(x).total)));
+    return me > best ? 0 : 40;
+  }
+  return 5 + sh.pen * 1.5;
+}
 
 // Entscheidung über die weiße Summe
 export function aiWhite(s, p, level = 'mittel', rnd = Math.random) {
@@ -181,8 +222,8 @@ export function aiWhite(s, p, level = 'mittel', rnd = Math.random) {
     // Droht ein Fehlwurf? Dann lieber die weiße Summe nehmen, wenn keine Farbe besser passt.
     let bestColor = -Infinity;
     for (const o of colorOptions(s, p)) bestColor = Math.max(bestColor, markValue(s, p, o.c, o.v, level).val);
-    const penaltyCost = 5 + s.sheets[p].pen * 1.5;
-    if (bestColor < 0.3 && best.val > -penaltyCost * 0.8 && best.val >= bestColor) return best;
+    const pc = penaltyCost(s, p);
+    if (bestColor < 0.3 && best.val > -pc * 0.8 && best.val >= bestColor) return best;
   }
   return null;
 }
@@ -198,12 +239,29 @@ export function aiColor(s, level = 'mittel', rnd = Math.random) {
     if (better(cand, best)) best = cand;
   }
   if (level === 'leicht' && rnd() < 0.2) return opts.length ? opts[Math.floor(rnd() * opts.length)] : null;
-  const penaltyCost = s.activeMarked ? 0 : 5 + s.sheets[p].pen * 1.5;
+  const pc = s.activeMarked ? 0 : penaltyCost(s, p);
   if (!best) return null;
   if (best.val > 0.3) return best;
-  // Fehlwurf vermeiden, wenn das Kreuz weniger kostet als 5 Punkte
-  if (!s.activeMarked && best.val > -penaltyCost * 0.8) return best;
+  // Fehlwurf vermeiden, wenn das Kreuz weniger kostet als der Fehlwurf
+  if (!s.activeMarked && best.val > -pc * 0.8) return best;
   return null;
+}
+
+// Neuwurf-Joker: lohnt sich ein neuer Wurf? (nur direkt nach dem eigenen Wurf)
+export function rollQuality(s, p, level = 'mittel') {
+  let best = -Infinity;
+  for (const o of whiteOptions(s, p)) best = Math.max(best, markValue(s, p, o.c, o.v, level).val);
+  for (const o of colorOptions(s, p)) best = Math.max(best, markValue(s, p, o.c, o.v, level).val);
+  if (best === -Infinity) best = -penaltyCost(s, p) * 0.8;   // nichts passt: Fehlwurf droht
+  return Math.max(best, -penaltyCost(s, p) * 0.8);
+}
+export function aiReroll(s, level = 'mittel') {
+  if (!canReroll(s)) return false;
+  const q = rollQuality(s, s.turn, level);
+  if (level === 'leicht') return q <= -penaltyCost(s, s.turn) * 0.8 && penaltyCost(s, s.turn) > 0;
+  // Am Ende der Partie lieber einsetzen als verfallen lassen
+  const thr = SK.reroll + progress(s) * 1.2;
+  return q < thr;
 }
 
 // Erklärung für Tipps
