@@ -4,7 +4,9 @@ import { load, save, remove, addResult, delay } from '../../store.js';
 import {
   START_FEN, fromFEN, toFEN, cloneState, legalMoves, makeMove, gameStatus, san, inCheck, kingSq,
   aiMove, search, scoreMove, explainMove, hangingPieces, sqName, colorOf, typeOf, PIECE_DE, VAL, isMateScore, mateIn,
+  forcesMate, bestDefense, isMate,
 } from './engine.js';
+import PUZZLES from './puzzles.js';
 
 const LEVEL_NAME = { leicht: 'leicht', mittel: 'mittel', schwer: 'schwer' };
 
@@ -23,8 +25,9 @@ export function mount(ui) {
     if (keep) persist();
   }
   const two = () => g.mode === 'two';
+  const puzzle = () => g.mode === 'puzzle';
   const COLOR_DE = { w: 'Weiß', b: 'Schwarz' };
-  const nameOfColor = c => (two() ? g.names[c] : (c === g.player ? 'Du' : 'Computer'));
+  const nameOfColor = c => (two() ? g.names[c] : (c === g.player ? 'Du' : puzzle() ? 'Gegner' : 'Computer'));
   function persist() { if (g && !g.over) save('save:schach', g); else remove('save:schach'); }
   const cur = () => fromFEN(g.fens[g.fens.length - 1]);
   const positions = () => g.fens.map(f => f.split(' ').slice(0, 4).join(' '));
@@ -87,6 +90,13 @@ export function mount(ui) {
     renderPlayers();
     renderMoves();
     const stt = g.over;
+    if (puzzle()) {
+      const pz = g.pz;
+      status.innerHTML = pz.solved ? '<b>Gelöst!</b> Schachmatt.' : busy ? 'Der Gegner verteidigt sich …'
+        : `<b>Rätsel ${pz.idx + 1}/${PUZZLES.length}</b> · ${pz.n === 2 && pz.stage === 1 ? 'Jetzt der Mattzug!' : `${COLOR_DE[g.player]} zieht und setzt matt${pz.n === 2 ? ' in 2 Zügen' : ''}.`}`;
+      ui.setSubtitle('Rätsel');
+      return;
+    }
     if (stt) status.innerHTML = `<b>${stt.reason}</b> – ${stt.result === '½-½' ? 'Remis' : two() ? `${nameOfColor(stt.result === '1-0' ? 'w' : 'b')} gewinnt` : (stt.result === '1-0') === (g.player === 'w') ? 'du hast gewonnen' : 'der Computer hat gewonnen'}`;
     else if (busy) status.textContent = 'Der Computer überlegt …';
     else if (two()) status.innerHTML = `${inCheck(st) ? '<b>Schach!</b> ' : ''}<b>${nameOfColor(st.turn)}</b> (${COLOR_DE[st.turn]}) ist am Zug.`;
@@ -168,6 +178,7 @@ export function mount(ui) {
   }
 
   async function playerMove(m) {
+    if (puzzle()) return puzzleMove(m);
     const before = cur();
     let review = null;
     if (ui.coachOn() && g.sans.length >= 0) {
@@ -222,7 +233,7 @@ export function mount(ui) {
   }
 
   async function computerTurn() {
-    if (two()) return;
+    if (two() || puzzle()) return;
     st = cur();
     if (g.over || st.turn === g.player) return;
     busy = true; render();
@@ -245,6 +256,7 @@ export function mount(ui) {
 
   function undo(n, silent) {
     if (busy) return;
+    if (puzzle()) { restartPuzzle(); return; }
     ui.coach.hide();
     if (g.over) g.over = null;
     // bis der Spieler wieder am Zug ist
@@ -266,6 +278,7 @@ export function mount(ui) {
   }
 
   function tip() {
+    if (puzzle()) return puzzleTip();
     if (busy || g.over) return;
     st = cur();
     if (!two() && st.turn !== g.player) return;
@@ -310,7 +323,7 @@ export function mount(ui) {
   }
 
   async function newGame(entry = false) {
-    const running = entry && hadSave && !g.over && g.sans.length > 0;
+    const running = entry && hadSave && !g.over && g.sans.length > 0 && !puzzle();
     for (;;) {
       const moves = Math.ceil(g.sans.length / 2);
       const c = await dialog({
@@ -319,9 +332,12 @@ export function mount(ui) {
         buttons: [
           ...(running ? [{ label: 'Weiterspielen', sub: `${two() ? `${g.names.w} gegen ${g.names.b}` : 'gegen den Computer'} · ${moves}. Zug`, value: 'resume', primary: true }] : []),
           { label: running ? 'Neu mit Weiß' : 'Weiß', sub: 'gegen den Computer', value: 'w', primary: !running }, { label: running ? 'Neu mit Schwarz' : 'Schwarz', sub: 'gegen den Computer', value: 'b' }, { label: 'Zufällige Farbe', sub: 'gegen den Computer', value: 'r' },
-          { label: 'Zu zweit', sub: 'zwei Menschen, ein iPhone', value: 'two' }, { label: entry ? 'Zur Sammlung' : 'Abbrechen', value: null, quiet: true }],
+          { label: 'Zu zweit', sub: 'zwei Menschen, ein iPhone', value: 'two' },
+          { label: 'Schach-Rätsel', sub: `Matt in 1 und 2 · ${pzProgress().solved.length} von ${PUZZLES.length} gelöst`, value: 'puzzle' },
+          { label: entry ? 'Zur Sammlung' : 'Abbrechen', value: null, quiet: true }],
       });
       if (c === 'resume') { computerTurn(); return; }
+      if (c === 'puzzle') { ui.coach.hide(); startPuzzle(puzzle() && !g.pz.solved ? g.pz.idx : nextPuzzleIdx(-1)); return; }
       if (!c) { if (entry) location.hash = '#/'; return; }
       if (c === 'two') {
         const names = await askNames();
@@ -340,6 +356,95 @@ export function mount(ui) {
       else welcome();
       return;
     }
+  }
+
+  // ---------- Rätsel ----------
+  const pzProgress = () => load('schach:puzzles', { solved: [] });
+  function startPuzzle(idx) {
+    const p = PUZZLES[idx];
+    const st0 = fromFEN(p.fen);
+    g = { fens: [p.fen], sans: [], last: [], player: st0.turn, over: null, mode: 'puzzle', names: { w: 'Weiß', b: 'Schwarz' }, flip: false,
+      pz: { idx, n: p.n, stage: 0, solved: false, tries: 0, hints: 0 } };
+    sel = null; hint = null; busy = false;
+    persist(); render();
+    if (ui.coachOn() && !load('schach:pz-intro', false)) {
+      save('schach:pz-intro', true);
+      ui.coach.say({ title: 'Schach-Rätsel', text: ['Finde das Matt! Bei „Matt in 2“ ziehst du, der Gegner verteidigt sich bestmöglich, dann setzt du matt.', 'Die Glühbirne zeigt erst die Figur, beim zweiten Mal den ganzen Zug. „Zurücknehmen“ startet das Rätsel neu.'], ms: 11000 });
+    }
+  }
+  function restartPuzzle() { ui.coach.hide(); const t = g.pz.tries; startPuzzle(g.pz.idx); g.pz.tries = t; }
+  function nextPuzzleIdx(from = -1) {
+    const done = new Set(pzProgress().solved);
+    for (let k = 1; k <= PUZZLES.length; k++) { const i = (from + k) % PUZZLES.length; if (!done.has(i)) return i; }
+    return (from + 1) % PUZZLES.length;
+  }
+  async function puzzleMove(m) {
+    const pz = g.pz;
+    if (pz.solved) return;
+    const before = cur();
+    ui.coach.hide();
+    const n = pz.n - pz.stage;
+    const good = n === 1 ? (() => { const s2 = cloneState(before); makeMove(s2, m); return isMate(s2); })() : forcesMate(before, m, n);
+    if (!good) {
+      pz.tries++;
+      sel = null; persist(); render();
+      const s2 = cloneState(before); makeMove(s2, m);
+      const why = n === 1 ? (inCheck(s2) ? 'Das ist Schach, aber der König kann noch entkommen.' : 'Das ist kein Schach – und damit auch kein Matt.')
+        : 'Danach kann sich der Gegner noch retten. Achte auf Züge, die dem König alle Fluchtfelder nehmen.';
+      toast(`${san(before, m)}? ${why}`, 3600);
+      return;
+    }
+    apply(m);
+    g.over = null;
+    if (isMate(cur())) return puzzleSolved();
+    // Gegner verteidigt
+    pz.stage++;
+    busy = true; render();
+    await sleep(delay(700));
+    if (ui.destroyed) return;
+    const d = bestDefense(cur());
+    busy = false;
+    if (d) apply(d);
+    g.over = null;
+    persist(); render();
+    toast('Gut! Jetzt der Mattzug.', 2000);
+  }
+  async function puzzleSolved() {
+    const pz = g.pz;
+    pz.solved = true;
+    const pr = pzProgress();
+    if (!pr.solved.includes(pz.idx)) pr.solved.push(pz.idx);
+    save('schach:puzzles', pr);
+    persist(); render();
+    await sleep(400);
+    const perfect = !pz.tries && !pz.hints;
+    const P = PUZZLES[pz.idx];
+    const learn = P.name ? `<br><br><b>${P.name}:</b> ${P.info}` : '';
+    const r = await dialog({ title: 'Gelöst!', body: `${perfect ? 'Auf Anhieb – stark!' : pz.hints ? 'Mit etwas Hilfe – beim nächsten Mal schaffst du es allein.' : 'Geschafft!'} Du hast ${pr.solved.length} von ${PUZZLES.length} Rätseln gelöst.${learn}`,
+      buttons: [{ label: 'Brett ansehen', value: 'look' }, { label: 'Nächstes Rätsel', value: 'next', primary: true }] });
+    if (r === 'next') startPuzzle(nextPuzzleIdx(pz.idx));
+  }
+  function puzzleTip() {
+    const pz = g.pz;
+    if (pz.solved) { startPuzzle(nextPuzzleIdx(pz.idx)); return; }
+    if (busy) return;
+    const st0 = cur();
+    const n = pz.n - pz.stage;
+    let key = null;
+    if (pz.stage === 0 && PUZZLES[pz.idx].sol) key = legalMoves(st0).find(m => san(st0, m).replace(/[+#]/g, '') === PUZZLES[pz.idx].sol.split('|')[0].replace(/[+#]/g, ''));
+    if (!key) key = legalMoves(st0).find(m => (n === 1 ? (() => { const s2 = cloneState(st0); makeMove(s2, m); return isMate(s2); })() : forcesMate(st0, m, n)));
+    if (!key) return;
+    pz.hints++;
+    if (pz.hints === 1 || (pz.stage === 1 && pz.hints === 2 && !hint)) {
+      hint = { from: key.from, to: key.from };
+      render();
+      const P = PUZZLES[pz.idx];
+      ui.coach.say({ title: 'Kleiner Tipp', text: [`Es geht los mit ${PIECE_DE[typeOf(key.piece)] === 'Dame' ? 'der' : 'dem'} ${PIECE_DE[typeOf(key.piece)]} auf ${sqName(key.from)}.${n === 2 && pz.stage === 0 ? ' Der erste Zug darf ruhig ein Opfer sein!' : ''}`, P.name && pz.stage === 0 ? `Stichwort: ${P.name}.` : ''].filter(Boolean), ms: 7000 });
+      return;
+    }
+    hint = key;
+    render();
+    ui.coach.say({ title: 'Lösung: ' + san(st0, key), text: n === 2 ? 'Nach diesem Zug hat der Gegner keine Rettung mehr – egal, was er tut.' : 'Damit ist der König matt.', actions: [{ label: 'Ausführen', primary: true, onClick: () => { hint = null; puzzleMove(key); } }] });
   }
 
   async function askNames() {

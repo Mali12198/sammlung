@@ -43,17 +43,25 @@ export const scoreFor = (cat, dice, joker) => scoreC(cat, countsOf(dice), joker)
 export const isPoker = dice => dice.length === 5 && dice.every(d => d === dice[0]);
 
 // ---------------------------------------------------------------
-// Spiel
+// Spiel. Dreifach-Variante: drei Spalten (×1, ×2, ×3), jede Runde ein Feld in einer beliebigen Spalte.
+// Feldschlüssel: 'ones' (Spalte 1), 'ones1' (Spalte 2), 'ones2' (Spalte 3).
 // ---------------------------------------------------------------
+export const colKey = (cat, k) => (k ? cat + k : cat);
+export const nCols = s => (s.opts && s.opts.triple ? 3 : 1);
+export const allKeys = s => CATS.flatMap(c => [...Array(nCols(s)).keys()].map(k => colKey(c, k)));
+export const roundsTotal = s => 13 * nCols(s);
+const anyCol = (s, sh, f) => [...Array(nCols(s)).keys()].some(k => f(sh[colKey('poker', k)]));
+
 export function newGame(players, opts = {}) {
-  return {
+  const g = {
     players: players.map(p => ({ ...p })),
-    sheets: players.map(() => Object.fromEntries(CATS.map(c => [c, null]))),
     extra: players.map(() => 0),     // weitere Poker (je 50 Bonus)
     turn: 0, round: 1,
     dice: [1, 2, 3, 4, 5], held: [false, false, false, false, false], rollsLeft: 3,
-    phase: 'roll', opts: { joker: opts.joker !== false }, log: [],
+    phase: 'roll', opts: { joker: opts.joker !== false, triple: !!opts.triple }, log: [],
   };
+  g.sheets = players.map(() => Object.fromEntries(allKeys(g).map(c => [c, null])));
+  return g;
 }
 
 export function roll(s, rnd = Math.random) {
@@ -67,46 +75,55 @@ export function roll(s, rnd = Math.random) {
 export const hasRolled = s => s.rollsLeft < 3;
 
 export function jokerActive(s, p = s.turn) {
-  return s.opts.joker && isPoker(s.dice) && s.sheets[p].poker !== null;
+  return s.opts.joker && isPoker(s.dice) && anyCol(s, s.sheets[p], v => v !== null);
 }
 
 export function options(s, p = s.turn) {
   const joker = jokerActive(s, p);
   const c = countsOf(s.dice);
-  return CATS.filter(cat => s.sheets[p][cat] === null).map(cat => ({ cat, score: scoreC(cat, c, joker) }));
+  const res = [];
+  for (let k = 0; k < nCols(s); k++) for (const cat of CATS) if (s.sheets[p][colKey(cat, k)] === null) res.push({ cat, col: k, key: colKey(cat, k), score: scoreC(cat, c, joker) });
+  return res;
 }
 
-export function enter(s, cat) {
+export function enter(s, cat, col = 0) {
   const p = s.turn;
+  const key = colKey(cat, col);
   if (!hasRolled(s)) throw new Error('erst würfeln');
-  if (s.sheets[p][cat] !== null) throw new Error('Feld schon belegt');
+  if (s.sheets[p][key] !== null) throw new Error('Feld schon belegt');
   const joker = jokerActive(s, p);
-  if (s.opts.joker && isPoker(s.dice) && s.sheets[p].poker === 50) s.extra[p]++;
+  if (s.opts.joker && isPoker(s.dice) && anyCol(s, s.sheets[p], v => v === 50)) s.extra[p]++;
   const v = scoreC(cat, countsOf(s.dice), joker);
-  s.sheets[p][cat] = v;
-  s.log.push({ p, cat, v, dice: s.dice.slice() });
+  s.sheets[p][key] = v;
+  s.log.push({ p, cat, col, v, dice: s.dice.slice() });
   // nächster Spieler
   s.held = [false, false, false, false, false];
   s.rollsLeft = 3;
   s.turn = (p + 1) % s.players.length;
   if (s.turn === 0) s.round++;
-  if (s.sheets.every(sh => CATS.every(c => sh[c] !== null))) { s.phase = 'done'; s.round = 13; }
+  if (s.sheets.every(sh => allKeys(s).every(c => sh[c] !== null))) { s.phase = 'done'; s.round = roundsTotal(s); }
   return v;
+}
+
+function colTotals(sh, k) {
+  const upper = UPPER.reduce((a, c) => a + (sh[colKey(c, k)] || 0), 0);
+  const bonus = upper >= 63 ? 35 : 0;
+  const lower = LOWER.reduce((a, c) => a + (sh[colKey(c, k)] || 0), 0);
+  return { upper, bonus, lower, sum: upper + bonus + lower, mult: k + 1 };
 }
 
 export function totals(s, p) {
   const sh = s.sheets[p];
-  const upper = UPPER.reduce((a, c) => a + (sh[c] || 0), 0);
-  const bonus = upper >= 63 ? 35 : 0;
-  const lower = LOWER.reduce((a, c) => a + (sh[c] || 0), 0);
+  const cols = [...Array(nCols(s)).keys()].map(k => colTotals(sh, k));
   const extra = s.extra[p] * 50;
-  return { upper, bonus, lower, extra, total: upper + bonus + lower + extra };
+  const total = cols.reduce((a, c) => a + c.sum * c.mult, 0) + extra;
+  return { upper: cols[0].upper, bonus: cols[0].bonus, lower: cols[0].lower, extra, total, cols };
 }
 
-// Ist der Bonus (63 oben) noch erreichbar?
-export function bonusReachable(sh) {
+// Ist der Bonus (63 oben) in Spalte k noch erreichbar?
+export function bonusReachable(sh, k = 0) {
   let have = 0, max = 0;
-  for (const c of UPPER) { if (sh[c] !== null) have += sh[c]; else max += FACE[c] * 5; }
+  for (const c of UPPER) { const v = sh[colKey(c, k)]; if (v !== null && v !== undefined) have += v; else max += FACE[c] * 5; }
   return have >= 63 || have + max >= 63;
 }
 
@@ -149,30 +166,34 @@ function keepsOf(c) {
 // Wert eines Eintrags für den Computer (Punkte minus das, was das Feld später im Schnitt brächte)
 export function makeValuer(s, p, level = 'mittel') {
   const sh = s.sheets[p];
-  const open = CATS.filter(c => sh[c] === null);
-  const upperHave = UPPER.reduce((a, c) => a + (sh[c] || 0), 0);
-  const reach = upperHave < 63 && bonusReachable(sh);
+  const cols = [...Array(nCols(s)).keys()];
+  const open = [];
+  for (const k of cols) for (const cat of CATS) if (sh[colKey(cat, k)] === null) open.push({ cat, k });
+  const upperHave = cols.map(k => UPPER.reduce((a, c) => a + (sh[colKey(c, k)] || 0), 0));
+  const reach = cols.map(k => upperHave[k] < 63 && bonusReachable(sh, k));
   const bw = level === 'leicht' ? 0.05 : level === 'mittel' ? 0.25 : 0.6;
-  const poker50 = sh.poker === 50 && s.opts.joker;
-  const pokerFilled = sh.poker !== null && s.opts.joker;
+  const poker50 = s.opts.joker && anyCol(s, sh, v => v === 50);
+  const pokerFilled = s.opts.joker && anyCol(s, sh, v => v !== null);
   const turnsLeft = open.length;
   return function value(c) {
     const isK = maxC(c) === 5;
     const joker = isK && pokerFilled;
-    let best = -Infinity, bestCat = null;
-    for (const cat of open) {
+    let best = -Infinity, bestCat = null, bestCol = 0;
+    for (const { cat, k } of open) {
       const sc = scoreC(cat, c, joker);
+      const m = k + 1;
       let v = sc - BASE[cat] * (turnsLeft > 1 ? 1 : 0);
       const f = FACE[cat];
-      if (f && reach) {
+      if (f && reach[k]) {
         v += (sc - 3 * f) * bw;
-        if (upperHave + sc >= 63) v += level === 'schwer' ? 22 : level === 'mittel' ? 8 : 0;
+        if (upperHave[k] + sc >= 63) v += level === 'schwer' ? 22 : level === 'mittel' ? 8 : 0;
       }
       if (cat === 'poker' && sc === 50) v += 8;
-      if (v > best) { best = v; bestCat = cat; }
+      v *= m;
+      if (v > best) { best = v; bestCat = cat; bestCol = k; }
     }
     if (isK && poker50) best += 50;
-    return { v: best, cat: bestCat };
+    return { v: best, cat: bestCat, col: bestCol };
   };
 }
 
@@ -205,7 +226,7 @@ export function plan(s, level = 'mittel') {
   }
   const c = countsOf(s.dice);
   const now = valuer(c);
-  if (s.rollsLeft === 0) return { action: 'enter', cat: now.cat, value: now.v };
+  if (s.rollsLeft === 0) return { action: 'enter', cat: now.cat, col: now.col, value: now.v };
   const r = Math.min(s.rollsLeft, maxR);
   let best = { k: null, e: -Infinity };
   const all = [];
@@ -219,8 +240,8 @@ export function plan(s, level = 'mittel') {
     all.push({ k, e, n });
     if (e > best.e) best = { k, e, n };
   }
-  if (now.v >= best.e - 1e-9 || best.n === 0) return { action: 'enter', cat: now.cat, value: now.v, rollValue: best.e };
-  return { action: 'roll', keep: best.k, e: best.e, now: now.v, nowCat: now.cat, all };
+  if (now.v >= best.e - 1e-9 || best.n === 0) return { action: 'enter', cat: now.cat, col: now.col, value: now.v, rollValue: best.e };
+  return { action: 'roll', keep: best.k, e: best.e, now: now.v, nowCat: now.cat, nowCol: now.col, all };
 }
 
 // Haltevektor → welche Würfel (Indizes) gehalten werden
@@ -235,7 +256,7 @@ export function aiStep(s, level = 'mittel', rnd = Math.random) {
   if (level === 'leicht' && pl.action === 'roll') {
     // gelegentlich zu früh eintragen oder planlos halten
     const x = rnd();
-    if (x < 0.15) return { action: 'enter', cat: pl.nowCat };
+    if (x < 0.15) return { action: 'enter', cat: pl.nowCat, col: pl.nowCol };
     if (x < 0.4) { const k = [0, 0, 0, 0, 0, 0, 0]; for (const d of s.dice) if (rnd() < 0.5) k[d]++; return { action: 'roll', keep: k }; }
   }
   return pl;
@@ -257,7 +278,7 @@ export function explainKeep(dice, keep, s) {
     if (sh[UPPER[face - 1]] === null) goals.push(CAT_NAME[UPPER[face - 1]]);
     if (sh.three === null && mx < 3) goals.push('Dreierpasch');
     if (sh.four === null) goals.push('Viererpasch');
-    if (sh.poker === null || sh.poker === 50) goals.push('Poker');
+    if (sh.poker === null || sh.poker === 50 || (nCols(s) > 1 && (sh.poker1 === null || sh.poker2 === null))) goals.push('Poker');
     return `Sammle ${face}er: Mit ${mx} gleichen bist du auf dem Weg zu ${goals.slice(0, 3).join(', ') || 'einem Pasch'}.`;
   }
   if (distinct === n && n >= 3) {

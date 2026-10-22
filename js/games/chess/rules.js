@@ -93,7 +93,18 @@ export default {
 <h3>Spielstärke</h3>
 <p><b>Leicht</b> rechnet kaum voraus und macht absichtlich Fehler. <b>Mittel</b> rechnet etwa vier Halbzüge. <b>Schwer</b> rechnet so tief, wie es in gut zwei Sekunden geht.</p>
 <p>Deine Partie wird automatisch gespeichert – du kannst die App jederzeit schließen.</p>
-<h3>Zu zweit</h3><p>Menü → „Neues Spiel“ → „Zu zweit“: Ihr gebt eure Namen ein und spielt abwechselnd am selben iPhone. Mit „Brett mitdrehen“ sieht immer der Spieler am Zug seine Figuren unten. „Zurücknehmen“ nimmt dann genau einen Halbzug zurück.</p>`,
+<h3>Zu zweit</h3><p>Menü → „Neues Spiel“ → „Zu zweit“: Ihr gebt eure Namen ein und spielt abwechselnd am selben iPhone. Mit „Brett mitdrehen“ sieht immer der Spieler am Zug seine Figuren unten. „Zurücknehmen“ nimmt dann genau einen Halbzug zurück.</p>
+<h3>Rätsel</h3><p>Menü → „Neues Spiel“ → „Schach-Rätsel“: knapp 50 Aufgaben „Matt in 1“ und „Matt in 2“. Bei Matt in 2 verteidigt sich der Gegner nach deinem ersten Zug bestmöglich. Die Glühbirne zeigt zuerst die Figur, beim zweiten Mal den ganzen Zug. „Zurücknehmen“ startet das Rätsel neu. Gelöste Rätsel werden gespeichert.</p>`,
+    },
+    {
+      id: 'matt', label: 'Mattbilder', html: `
+<p>Diese Muster tauchen in Partien immer wieder auf. Wer sie kennt, sieht Matts viel schneller – in den Rätseln kannst du sie üben.</p>
+<h3>Grundreihenmatt</h3><p>Der König steht hinter seinen eigenen Bauern. Ein Turm oder die Dame auf der letzten Reihe setzt matt. Schutz: rechtzeitig mit einem Bauernzug „Luft“ machen.</p>
+<h3>Ersticktes Matt</h3><p>Der König ist von eigenen Figuren eingemauert – nur ein Springer kann ihn noch angreifen. Klassiker: Damenopfer auf g8, der Turm schlägt, Springer f7 matt („Philidors Vermächtnis“).</p>
+<h3>Treppenmatt</h3><p>Zwei Schwerfiguren treiben den König Reihe für Reihe an den Rand: Einer sperrt ab, der andere gibt Schach.</p>
+<h3>Arabisches Matt und Anastasias Matt</h3><p>Turm und Springer arbeiten zusammen: Der Springer nimmt die Fluchtfelder, der Turm gibt Schach auf der Linie oder Reihe.</p>
+<h3>Epaulettenmatt</h3><p>Die eigenen Türme stehen links und rechts neben dem König wie Schulterklappen und versperren ihm die Flucht.</p>
+<h3>Schäfermatt</h3><p>Dame und Läufer zielen früh auf f7 (bzw. f2). Abwehr: das Feld mit einem Springer oder der Dame decken.</p>`,
     },
   ],
 };

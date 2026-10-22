@@ -37,6 +37,19 @@ export default {
 <p>Der Wert wird mit dem <b>Doppelwürfel</b> malgenommen. Vor deinem Wurf darfst du verdoppeln. Der Gegner nimmt an (es geht um das Doppelte, er bekommt den Würfel und darf als Nächster zurückdoppeln) oder gibt auf und zahlt den bisherigen Wert.</p>`,
     },
     {
+      id: 'match', label: 'Match', html: `
+<h3>Match-Spiel</h3>
+<p>Im Turnier spielt man nicht einzelne Partien, sondern ein <b>Match</b> auf eine feste Punktzahl, z. B. bis 5 oder 7. Jede Partie bringt 1 Punkt, ein Gammon 2, ein Backgammon 3 – jeweils mal dem Doppelwürfel. Wer zuerst die Zielpunkte erreicht, gewinnt das Match.</p>
+<h3>Crawford-Regel</h3>
+<p>Steht ein Spieler zum ersten Mal <b>einen Punkt vor dem Ziel</b>, wird die nächste Partie ohne Doppelwürfel gespielt (die „Crawford-Partie“). Sonst würde der Zurückliegende sofort verdoppeln, weil er nichts zu verlieren hat. In den Partien danach darf wieder verdoppelt werden.</p>
+<h3>Taktik im Match</h3>
+<ul>
+<li>Liegst du knapp zurück, verdopple früher – jede Partie zählt mehr für dich.</li>
+<li>Liegst du klar vorne, nimm Verdopplungen vorsichtiger an: Ein verlorenes Doppel bringt den Gegner schnell heran.</li>
+<li>Nach der Crawford-Partie sollte der Zurückliegende sofort verdoppeln: Für ihn zählt nur noch der Sieg.</li>
+</ul>`,
+    },
+    {
       id: 'tricks', label: 'Tricks', html: `
 <h3>Die besten Eröffnungszüge</h3>
 <table>

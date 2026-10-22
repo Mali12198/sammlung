@@ -522,3 +522,43 @@ function openFile(b, f) {
   for (let r = 0; r < 8; r++) { const p = b[r * 8 + f]; if (p && typeOf(p) === 'P') return false; }
   return true;
 }
+
+// ------------------------------------------------------------------
+// Rätsel: Matt-Prüfung
+// ------------------------------------------------------------------
+export const isMate = st => legalMoves(st).length === 0 && inCheck(st);
+// Erzwingt Zug m (für die Seite am Zug) ein Matt in höchstens n Zügen – gegen jede Verteidigung?
+export function forcesMate(st0, m, n) {
+  const st = cloneState(st0);
+  const rec = (mv, k) => {
+    const u = makeMove(st, mv);
+    let ok;
+    const replies = legalMoves(st);
+    if (!replies.length) ok = inCheck(st);
+    else if (k === 1) ok = false;
+    else {
+      ok = true;
+      for (const r of replies) {
+        const u2 = makeMove(st, r);
+        const any = legalMoves(st).some(m2 => rec(m2, k - 1));
+        unmakeMove(st, r, u2);
+        if (!any) { ok = false; break; }
+      }
+    }
+    unmakeMove(st, mv, u);
+    return ok;
+  };
+  return rec(m, n);
+}
+// Beste Verteidigung nach dem Schlüsselzug: die Antwort, nach der es am wenigsten Mattzüge gibt
+export function bestDefense(st0, rnd = Math.random) {
+  const st = cloneState(st0);
+  let best = null, bestN = Infinity;
+  for (const r of legalMoves(st)) {
+    const u = makeMove(st, r);
+    const n = legalMoves(st).filter(m => { const u2 = makeMove(st, m); const mate = isMate(st); unmakeMove(st, m, u2); return mate; }).length;
+    unmakeMove(st, r, u);
+    if (n < bestN || (n === bestN && rnd() < 0.4)) { bestN = n; best = r; }
+  }
+  return best;
+}

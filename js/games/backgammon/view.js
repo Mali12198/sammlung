@@ -29,15 +29,23 @@ export function mount(ui) {
   let g = load('save:backgammon');
   let sel = null, hintSteps = null, busy = false;
 
-  function fresh(keepScore = true, keep = true) {
+  // Match: match = Zielpunkte (0 = freie Partien). Crawford-Regel: In der ersten Partie, nachdem jemand
+  // einen Punkt vor dem Ziel steht, darf nicht verdoppelt werden.
+  function fresh(keepScore = true, keep = true, match) {
     const old = g;
+    const m = match !== undefined ? match : old ? old.match || 0 : 0;
+    const score = keepScore && old && !old.matchOver ? old.score : [0, 0];
+    const crawfordUsed = keepScore && old && !old.matchOver ? !!old.crawfordUsed : false;
+    const crawford = !!m && !crawfordUsed && (score[0] === m - 1 || score[1] === m - 1);
     g = {
       s: newState(), phase: 'start', dice: [], done: [], turnStart: null, paths: [], maxLen: 0,
-      score: keepScore && old ? old.score : [0, 0], lastAi: '', over: null, openDice: null,
+      score, lastAi: '', over: null, openDice: null,
       mode: old ? old.mode || 'cpu' : 'cpu', names: old ? old.names || ['Du', 'Computer'] : ['Du', 'Computer'], cur: 0,
+      match: m, crawford, crawfordUsed: crawfordUsed || crawford, matchOver: false,
     };
     if (keep) persist();
   }
+  const cubeFree = me => !g.crawford && (g.s.cubeOwner === -1 || g.s.cubeOwner === me) && g.s.cube < 64;
   function persist() { save('save:backgammon', g); }
   const two = () => g.mode === 'two';
   const side = () => g.cur || 0;
@@ -198,7 +206,8 @@ export function mount(ui) {
   function renderInfo() {
     const s = g.s;
     info.replaceChildren(
-      h('span', {}, nm(0) + ' ', h('b', {}, String(g.score[0])), ' : ', h('b', {}, String(g.score[1])), ' ' + nm(1)),
+      h('span', {}, nm(0) + ' ', h('b', {}, String(g.score[0])), ' : ', h('b', {}, String(g.score[1])), ' ' + nm(1),
+        g.match ? h('small', { class: 'bg-match' }, ` · Match bis ${g.match}${g.crawford ? ' · Crawford' : ''}`) : null),
       h('span', { class: 'pip' }, `noch ${pips(s, 0)} : ${pips(s, 1)} Augen`));
     ui.setSubtitle(two() ? 'Zu zweit' : `Computer ${ui.level()}`);
   }
@@ -211,7 +220,7 @@ export function mount(ui) {
       if (!g.openDice) btns.push(h('button', { class: 'btn btn-primary', onclick: openingRoll }, 'Auswürfeln'));
     } else if (g.phase === 'roll') {
       txt = two() ? `<b>${nm(side())}</b> ist dran (${side() === 0 ? 'helle' : 'dunkle'} Steine).` : 'Du bist dran.';
-      const canDouble = (g.s.cubeOwner === -1 || g.s.cubeOwner === side()) && g.s.cube < 64;
+      const canDouble = cubeFree(side());
       if (canDouble) btns.push(h('button', { class: 'btn', onclick: playerDoubles }, `Verdoppeln auf ${g.s.cube * 2}`));
       btns.push(h('button', { class: 'btn btn-primary', onclick: playerRoll }, 'Würfeln'));
     } else if (g.phase === 'move') {
@@ -226,7 +235,7 @@ export function mount(ui) {
       txt = g.lastAi ? `Computer: ${g.lastAi}` : 'Der Computer ist am Zug …';
     } else if (g.phase === 'over') {
       txt = g.over;
-      btns.push(h('button', { class: 'btn btn-primary', onclick: () => { fresh(true); render(); } }, 'Nächste Partie'));
+      btns.push(h('button', { class: 'btn btn-primary', onclick: () => { fresh(true); render(); } }, g.matchOver ? 'Neues Match' : 'Nächste Partie'));
     }
     status.innerHTML = txt;
     controls.replaceChildren(...btns);
@@ -414,7 +423,7 @@ export function mount(ui) {
     await sleep(delay(500));
     if (ui.destroyed) return;
     // Verdoppeln?
-    if (aiShouldDouble(g.s, 1, ui.level())) {
+    if (cubeFree(1) && aiShouldDouble(g.s, 1, ui.level())) {
       const p = Math.round(winProb(g.s, 0) * 100);
       if (ui.coachOn()) ui.coach.say({ title: 'Verdoppeln – was nun?', text: [`Ich schätze deine Gewinnchance auf etwa <b>${p} %</b>.`, p >= 25 ? 'Ab etwa 25 % lohnt es sich anzunehmen.' : 'Unter 25 % ist Aufgeben meist günstiger.'] });
       const r = await dialog({
@@ -472,13 +481,18 @@ export function mount(ui) {
     g.phase = 'over';
     const txt = `${nm(w)} ${verb(w, 'gewinnst', 'gewinnt')} ${points} ${points === 1 ? 'Punkt' : 'Punkte'}${why ? ' – ' + why : ''}.`;
     g.over = txt;
-    if (!two()) addResult('backgammon', w === 0);
+    const matchWon = g.match && g.score[w] >= g.match;
+    if (matchWon) g.matchOver = true;
+    if (!two() && (!g.match || matchWon)) addResult('backgammon', w === 0);
     persist(); render();
     await sleep(400);
+    const title = matchWon ? (two() ? `${nm(w)} ${verb(w, 'gewinnst', 'gewinnt')} das Match!` : w === 0 ? 'Match gewonnen!' : 'Match verloren')
+      : two() ? `${nm(w)} ${verb(w, 'gewinnst', 'gewinnt')}!` : w === 0 ? 'Gewonnen!' : 'Verloren';
+    const left = g.match && !matchWon ? ` Ziel: ${g.match}.${(g.score[0] === g.match - 1 || g.score[1] === g.match - 1) && !g.crawfordUsed ? ' Nächste Partie ist die <b>Crawford-Partie</b>: kein Verdoppeln.' : ''}` : '';
     const r = await dialog({
-      title: two() ? `${nm(w)} ${verb(w, 'gewinnst', 'gewinnt')}!` : w === 0 ? 'Gewonnen!' : 'Verloren',
-      body: `${txt}<br>Stand: ${nm(0)} ${g.score[0]} : ${g.score[1]} ${nm(1)}.`,
-      buttons: [{ label: 'Brett ansehen', value: 'look' }, { label: 'Nächste Partie', value: 'next', primary: true }],
+      title,
+      body: `${txt}<br>Stand: ${nm(0)} ${g.score[0]} : ${g.score[1]} ${nm(1)}.${left}`,
+      buttons: [{ label: 'Brett ansehen', value: 'look' }, { label: matchWon ? 'Neues Match' : 'Nächste Partie', value: 'next', primary: true }],
     });
     if (r === 'next') { fresh(true); render(); }
   }
@@ -502,10 +516,10 @@ export function mount(ui) {
     if (g.phase === 'roll') {
       const me = side();
       const p = Math.round(winProb(g.s, me) * 100);
-      const canDouble = (g.s.cubeOwner === -1 || g.s.cubeOwner === me) && g.s.cube < 64;
+      const canDouble = cubeFree(me);
       ui.coach.say({ title: 'Lage vor dem Wurf', text: [
         `${two() ? nm(me) + ': deine' : 'Deine'} Gewinnchance schätze ich auf etwa <b>${p} %</b> (Augen: ${nm(me)} ${pips(g.s, me)}, ${nm(1 - me)} ${pips(g.s, 1 - me)}).`,
-        canDouble ? (p >= 70 ? 'Das ist stark genug zum <b>Verdoppeln</b>.' : 'Zum Verdoppeln brauchst du etwa 70 %. Erst mal würfeln.') : 'Den Doppelwürfel hat gerade der Computer.'] });
+        canDouble ? (p >= 70 ? 'Das ist stark genug zum <b>Verdoppeln</b>.' : 'Zum Verdoppeln brauchst du etwa 70 %. Erst mal würfeln.') : g.crawford ? 'Crawford-Partie: Hier darf niemand verdoppeln.' : 'Den Doppelwürfel hat gerade der Computer.'] });
       return;
     }
     if (g.phase !== 'move' && g.phase !== 'confirm') { ui.coach.say({ title: 'Tipp', text: 'Tipps gibt es, wenn du am Zug bist.', ms: 2500 }); return; }
@@ -534,21 +548,30 @@ export function mount(ui) {
       const r = await dialog({
         title: entry ? 'Backgammon – wie willst du spielen?' : 'Neue Partie',
         body: entry ? '' : 'Die laufende Partie wird abgebrochen.', layout: 'list', dismissable: !entry, buttons: [
-          ...(running ? [{ label: 'Weiterspielen', sub: `${two() ? `${g.names[0]} gegen ${g.names[1]}` : 'gegen den Computer'} · Stand ${g.score[0]} : ${g.score[1]}`, value: 'resume', primary: true }] : []),
+          ...(running ? [{ label: 'Weiterspielen', sub: `${two() ? `${g.names[0]} gegen ${g.names[1]}` : 'gegen den Computer'} · ${g.match ? `Match bis ${g.match} · ` : ''}${g.score[0]} : ${g.score[1]}`, value: 'resume', primary: true }] : []),
           { label: running ? 'Neu gegen den Computer' : 'Gegen den Computer', sub: g.score[0] + g.score[1] > 0 ? (two() ? 'neuer Punktestand' : 'Punktestand bleibt') : 'du spielst die hellen Steine', value: 'cpu', primary: !running && !two() },
           { label: running ? 'Neu zu zweit' : 'Zu zweit', sub: 'zwei Menschen, ein iPhone', value: 'two', primary: !running && two() },
           { label: entry ? 'Zur Sammlung' : 'Abbrechen', value: null, quiet: true }] });
       if (r === 'resume') { resumeGame(); return; }
       if (!r) { if (entry) location.hash = '#/'; return; }
+      const len = await dialog({
+        title: 'Wie lange spielt ihr?', layout: 'list', dismissable: true, buttons: [
+          { label: 'Einzelne Partien', sub: 'Punkte werden einfach weitergezählt', value: 'free', primary: !(g && g.match) },
+          { label: 'Match bis 3', sub: 'kurz – mit Crawford-Regel', value: 3, primary: g && g.match === 3 },
+          { label: 'Match bis 5', sub: 'der Klassiker', value: 5, primary: g && g.match === 5 },
+          { label: 'Match bis 7', sub: 'wie im Turnier', value: 7, primary: g && g.match === 7 },
+          { label: 'Zurück', value: null, quiet: true }] });
+      if (!len) continue;
+      const match = len === 'free' ? 0 : len;
       if (r === 'two') {
         const pl = await choosePlayers({ title: 'Backgammon zu zweit', min: 2, max: 2, labels: ['hell', 'dunkel'], current: two() ? g.names.map(n => ({ name: n, human: true })) : [{ name: 'Spieler 1', human: true }, { name: 'Spieler 2', human: true }], note: 'Hell zieht nach unten rechts, Dunkel nach oben rechts.' });
         if (!pl) { if (entry) continue; return; }   // zurück zur Auswahl
-        const keep = hadSave && two() && pl.every((p, i) => p.name === g.names[i]);
-        ui.coach.hide(); fresh(keep);
+        const keep = hadSave && two() && !match && !g.match && pl.every((p, i) => p.name === g.names[i]);
+        ui.coach.hide(); fresh(keep, true, match);
         g.mode = 'two'; g.names = pl.map(p => p.name);
       } else {
-        const keep = hadSave && !two();
-        ui.coach.hide(); fresh(keep);
+        const keep = hadSave && !two() && !match && !g.match;
+        ui.coach.hide(); fresh(keep, true, match);
         g.mode = 'cpu'; g.names = ['Du', 'Computer'];
       }
       hadSave = true;

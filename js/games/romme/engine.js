@@ -176,6 +176,7 @@ function refillStock(s) {
 export function drawStock(s, p) {
   if (s.phase !== 'draw' || s.turn !== p) throw new Error('nicht dran');
   refillStock(s);
+  if (!s.stock.length) { endBlocked(s); return null; }
   const c = s.stock.pop();
   s.hands[p].push(c);
   s.took = null;
@@ -303,6 +304,15 @@ export function discard(s, p, c) {
   s.turn = (p + 1) % s.n;
   s.phase = 'draw';
   s.turnMelds = [];
+}
+
+// Keine Karten mehr zum Ziehen: Runde endet, wer am wenigsten auf der Hand hat, gewinnt sie.
+function endBlocked(s) {
+  const pts = s.hands.map(handPoints);
+  const w = pts.indexOf(Math.min(...pts));
+  s.wentOut = -1; s.handRomme = false;
+  s.result = { winner: w, penalties: pts.map((v, q) => (q === w ? 0 : v)), handRomme: false, blocked: true };
+  s.phase = 'done'; s.turn = -1;
 }
 
 function endRound(s, p) {

@@ -210,7 +210,9 @@ export function mount(ui) {
     if (!myTurn() || s.phase !== 'draw') return;
     hint = null;
     const c = drawStock(s, viewer);
-    persist(); render();
+    persist();
+    if (s.phase === 'done') return roundOver();
+    render();
     flashNew(c);
   }
 
@@ -354,6 +356,7 @@ export function mount(ui) {
       if (d.pile) { const c = pileTop(s); takePile(s, p); bubble(p, `nimmt ${cardName(c)}`, 1800); }
       else { drawStock(s, p); bubble(p, 'zieht', 900); }
       persist(); render();
+      if (s.phase === 'done') continue;
       await sleep(delay(600));
       if (!alive()) return;
       const plan = aiPlan(s, p, lv);
@@ -419,7 +422,7 @@ export function mount(ui) {
     }
     const left = [...Array(N()).keys()].filter(p => p !== r.winner && s.hands[p].length);
     const content = h('div', { class: 'result' }, big,
-      h('p', { html: `${isYou(r.winner) ? 'Du bist' : nameOf(r.winner) + ' ist'} ausgegangen.${r.handRomme ? ' <b>Hand-Rommé!</b> Alles auf einmal ausgelegt' + (g.rules.handDouble ? ' – die anderen zahlen doppelt.' : '.') : ''}` }),
+      h('p', { html: r.blocked ? `Keine Karten mehr im Stapel – ${isYou(r.winner) ? 'du hast' : nameOf(r.winner) + ' hat'} am wenigsten auf der Hand.` : `${isYou(r.winner) ? 'Du bist' : nameOf(r.winner) + ' ist'} ausgegangen.${r.handRomme ? ' <b>Hand-Rommé!</b> Alles auf einmal ausgelegt' + (g.rules.handDouble ? ' – die anderen zahlen doppelt.' : '.') : ''}` }),
       h('table', { class: 'result-table' }, h('tr', {}, h('td', {}, 'Spieler'), h('td', {}, ''), h('td', { class: 'num' }, 'Runde'), h('td', { class: 'num' }, 'Gesamt')), rows),
       ...left.slice(0, 3).map(p => h('div', {}, h('p', { class: 'small' }, `${nameOf(p)} hatte noch (${handPoints(s.hands[p])} Punkte):`), h('div', { class: 'cardline' }, sortHand(s.hands[p]).map(c => cardEl(c, { w: 34 }))))),
       h('p', { class: 'small' }, `Strafpunkte: Joker 20, Ass 11, Bilder 10, sonst der Zahlenwert.${g.target ? ` Wer ${g.target} erreicht, beendet das Spiel – es gewinnt, wer die wenigsten Strafpunkte hat.` : ''}`));

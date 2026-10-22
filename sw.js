@@ -2,7 +2,7 @@
 // Jede Version wird beim Installieren komplett und frisch aus dem Netz geladen und danach
 // nur aus genau diesem Cache bedient – so werden nie alte und neue Dateien gemischt.
 // Bei jeder Änderung an der App CACHE hochzählen, sonst kommt das Update nicht an.
-const CACHE = 'spiele-v8';
+const CACHE = 'spiele-v9';
 const CORE = [
   './',
   "assets/fonts/jost-400.woff2",
@@ -13,7 +13,6 @@ const CORE = [
   "assets/icons/icon-512.png",
   "css/app.css",
   "css/games.css",
-  "index.html",
   "js/cards/render.js",
   "js/cards/table.js",
   "js/games/backgammon/engine.js",
@@ -23,6 +22,7 @@ const CORE = [
   "js/games/canasta/rules.js",
   "js/games/canasta/view.js",
   "js/games/chess/engine.js",
+  "js/games/chess/puzzles.js",
   "js/games/chess/rules.js",
   "js/games/chess/view.js",
   "js/games/doppelkopf/engine.js",
@@ -49,6 +49,7 @@ const CORE = [
   "js/store.js",
   "js/ui.js",
   "js/util.js",
+  "index.html",
   "manifest.webmanifest",
 ];
 

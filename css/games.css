@@ -606,3 +606,7 @@ button.dg-chip { font: inherit; cursor: pointer; }
 @media (max-width: 370px) { .rk-rack .tile { --tw: 32px; } .tile.sm { --tw: 22px; } }
 .rk-line { display: flex; flex-wrap: wrap; gap: 3px; }
 .mini-tile { display: inline-block; width: 10px; height: 13px; border-radius: 2px; background: #efe3c6; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.kn-sheet td.hint-cell { background: rgba(111,176,122,.4) !important; box-shadow: inset 0 0 0 2px #6fb07a; border-radius: 6px; }
+.kn-sheet.triple th { max-width: none; }
+.kn-sheet.triple th.cat { text-align: left; background: transparent; color: var(--ink); }
+.bg-match { color: var(--ivory-faint); font-weight: 400; }

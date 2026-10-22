@@ -1,4 +1,5 @@
-import { fromFEN, START_FEN, legalMoves, makeMove, unmakeMove, aiMove, gameStatus, toFEN, san, search } from '../js/games/chess/engine.js';
+import { fromFEN, START_FEN, legalMoves, makeMove, unmakeMove, aiMove, gameStatus, toFEN, san, search, forcesMate, isMate, cloneState, inCheck } from '../js/games/chess/engine.js';
+import PUZZLES from '../js/games/chess/puzzles.js';
 import { seeded } from '../js/util.js';
 
 function perft(st, d) {
@@ -45,6 +46,21 @@ export default function (t) {
         if (g === 0 && n >= 16) break; // eine Eröffnung mit „mittel“ genügt
       }
       t.ok(n > 0, 'Züge gespielt');
+    }
+  });
+  t('Rätsel: jedes hat eine Lösung, Matt in 2 ohne Matt in 1', () => {
+    t.ok(PUZZLES.length >= 20, 'genug Rätsel');
+    for (const p of PUZZLES) {
+      const st = fromFEN(p.fen);
+      t.ok(!inCheck(st, st.turn === 'w' ? 'b' : 'w'), 'gültige Stellung ' + p.fen);
+      const mv = legalMoves(st);
+      const m1 = mv.filter(m => { const s2 = cloneState(st); makeMove(s2, m); return isMate(s2); });
+      if (p.n === 1) t.ok(m1.length > 0, 'Matt in 1: ' + p.fen);
+      else {
+        t.eq(m1.length, 0, 'kein Matt in 1: ' + p.fen);
+        const key = mv.find(m => san(st, m) === p.sol.split('|')[0]);
+        t.ok(key && forcesMate(st, key, 2), 'Schlüsselzug erzwingt Matt: ' + p.fen);
+      }
     }
   });
 }
